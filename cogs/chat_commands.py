@@ -64,6 +64,7 @@ class ChatCommands(commands.Cog):
 
         embed = discord.Embed(title=f"👤 {member.display_name}'s Profile", color=role_color)
         embed.set_thumbnail(url=member.display_avatar.url)
+
         embed.add_field(name="📛 Username", value=f"`{member.name}#{member.discriminator}`", inline=True)
         embed.add_field(name="🆔 User ID", value=f"`{member.id}`", inline=True)
         embed.add_field(name="🌍 Status", value=status, inline=True)

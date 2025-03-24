@@ -8,8 +8,9 @@ class Moderation(commands.Cog):
 
     # ✅ Helper Function for Embeds
     async def send_embed(self, ctx, title, description, color):
+        icon_url = ctx.author.avatar.url if ctx.author.avatar else ctx.author.default_avatar.url
         embed = discord.Embed(title=title, description=description, color=color)
-        embed.set_footer(text=f"Requested by {ctx.author}", icon_url=ctx.author.avatar.url if ctx.author.avatar else None)
+        embed.set_footer(text=f"Requested by {ctx.author}", icon_url=icon_url)
         await ctx.send(embed=embed)
 
     # ✅ Ban Command
@@ -19,13 +20,16 @@ class Moderation(commands.Cog):
         await member.ban(reason=reason)
         await self.send_embed(ctx, "🚨 User Banned", f"**{member.mention}** has been **banned**.\n📝 Reason: {reason}", discord.Color.red())
 
-    # ✅ Unban Command
+    # ✅ Unban Command (Fixed)
     @commands.command(name="unban")
     @commands.has_permissions(ban_members=True)
     async def unban(self, ctx, user_id: int):
-        user = await self.bot.fetch_user(user_id)
-        await ctx.guild.unban(user)
-        await self.send_embed(ctx, "✅ User Unbanned", f"**{user.name}** has been unbanned.", discord.Color.green())
+        try:
+            user = await self.bot.fetch_user(user_id)
+            await ctx.guild.unban(user)
+            await self.send_embed(ctx, "✅ User Unbanned", f"**{user.name}** has been unbanned.", discord.Color.green())
+        except discord.NotFound:
+            await self.send_embed(ctx, "❌ Error", "User not found or not banned.", discord.Color.red())
 
     # ✅ Kick Command
     @commands.command(name="kick")
@@ -34,7 +38,7 @@ class Moderation(commands.Cog):
         await member.kick(reason=reason)
         await self.send_embed(ctx, "👢 User Kicked", f"**{member.mention}** has been kicked.\n📝 Reason: {reason}", discord.Color.orange())
 
-    # ✅ Purge Command (Bulk Delete Messages)
+    # ✅ Purge Command
     @commands.command(name="purge")
     @commands.has_permissions(manage_messages=True)
     async def purge(self, ctx, amount: int):
