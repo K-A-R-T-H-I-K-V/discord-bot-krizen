@@ -49,28 +49,39 @@ class Moderation(commands.Cog):
         deleted = await ctx.channel.purge(limit=amount)
         await self.send_embed(ctx, "🧹 Messages Purged", f"Deleted `{len(deleted)}` messages.", discord.Color.purple())
 
+     # ✅ Ensure Muted Role Exists with Proper Permissions
+    async def ensure_muted_role(self, guild):
+        muted_role = discord.utils.get(guild.roles, name="Muted")
+        if not muted_role:
+            muted_role = await guild.create_role(name="Muted", reason="Creating Muted role for moderation")
+            for channel in guild.channels:
+                await channel.set_permissions(muted_role, send_messages=False, speak=False, add_reactions=False)
+        return muted_role
+
     # ✅ Mute Command (Timed)
     @commands.command(name="mute")
     @commands.has_permissions(manage_roles=True)
     async def mute(self, ctx, member: discord.Member, duration: int = 10):
-        muted_role = discord.utils.get(ctx.guild.roles, name="Muted")
-        if not muted_role:
-            await self.send_embed(ctx, "⚠️ Error", "No **Muted** role found. Please create one.", discord.Color.red())
+        muted_role = await self.ensure_muted_role(ctx.guild)
+        
+        if muted_role in member.roles:
+            await self.send_embed(ctx, "⚠️ Error", f"**{member.mention}** is already muted.", discord.Color.red())
             return
-
+        
         await member.add_roles(muted_role)
         await self.send_embed(ctx, "🔇 User Muted", f"**{member.mention}** has been muted for `{duration}` minutes.", discord.Color.dark_gray())
 
         await asyncio.sleep(duration * 60)
         await member.remove_roles(muted_role)
+        await self.send_embed(ctx, "🔊 User Unmuted", f"**{member.mention}** has been automatically unmuted.", discord.Color.green())
 
     # ✅ Unmute Command
     @commands.command(name="unmute")
     @commands.has_permissions(manage_roles=True)
     async def unmute(self, ctx, member: discord.Member):
         muted_role = discord.utils.get(ctx.guild.roles, name="Muted")
-        if not muted_role:
-            await self.send_embed(ctx, "⚠️ Error", "No **Muted** role found. Please create one.", discord.Color.red())
+        if not muted_role or muted_role not in member.roles:
+            await self.send_embed(ctx, "⚠️ Error", f"**{member.mention}** is not muted.", discord.Color.red())
             return
 
         await member.remove_roles(muted_role)
