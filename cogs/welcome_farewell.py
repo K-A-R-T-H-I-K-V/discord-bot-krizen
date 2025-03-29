@@ -277,7 +277,12 @@ class WelcomeFarewell(commands.Cog):
 
         # Load Stylish Font
         try:
-            font_path = "assets/fonts/Cine de Barrio.ttf"
+            #font_path = "assets/fonts/Milkyway Free.ttf"
+            #font_path = "assets/fonts/StreetLookRegular.ttf"
+            #font_path = "assets/fonts/Creator's Collection Demo.ttf"
+            #font_path = "assets/fonts/Frostrex.ttf"
+            font_path = "assets/fonts/Quebab-Shadow-ffp.ttf"
+            
             font = ImageFont.truetype(font_path, int(pfp_size * 0.30))  # 30% of PFP size
         except IOError:
             font = ImageFont.load_default()
