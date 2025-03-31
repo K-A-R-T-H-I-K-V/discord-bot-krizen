@@ -31,7 +31,8 @@ async def load_cogs():
         "cogs.chat_commands",
         "cogs.roles",
         "cogs.events",
-        "cogs.welcome_farewell"  # ✅ Added new cog for Welcome & Farewell system
+        "cogs.welcome_farewell",  # ✅ Added new cog for Welcome & Farewell system
+        "cogs.ai_powered_moderation"
     ]
     
     for cog in cogs:
