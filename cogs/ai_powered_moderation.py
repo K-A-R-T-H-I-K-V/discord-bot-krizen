@@ -1,9 +1,12 @@
+##### 2 MODELS
+
 # import discord
 # from discord.ext import commands
 # import torch
 # import logging
 # from transformers import AutoTokenizer, AutoModelForSequenceClassification
 # from collections import defaultdict
+# import datetime
 
 # # Configure logging
 # logging.basicConfig(
@@ -23,11 +26,14 @@
 #     "secondary": {
 #         "name": "unitary/unbiased-toxic-roberta",
 #         "type": "multi-class",
-#         "base_threshold": 0.45,
+#         "base_threshold": 0.55,  # Increased default threshold
 #         "toxic_labels": ['toxicity', 'severe_toxicity', 'obscene', 
 #                         'identity_attack', 'insult', 'threat']
 #     }
 # }
+
+# # Protected command allowlist
+# COMMAND_ALLOWLIST = ["!help", "!info", "!support", "!about"]
 
 # # Load models and tokenizers
 # models = {}
@@ -50,15 +56,15 @@
 #         "secondary": MODEL_CONFIG["secondary"]["base_threshold"]
 #     },
 #     "weights": {
-#         "primary": 0.7,
-#         "secondary": 0.3
+#         "primary": 0.85,  # Favor primary model more
+#         "secondary": 0.15
 #     }
 # })
 
 # class AdvancedModeration(commands.Cog):
-#     def __init__(self, bot):
+#     def _init_(self, bot):
 #         self.bot = bot
-#         self.max_message_length = 500  # Truncate longer messages
+#         self.max_message_length = 500
 
 #     def _truncate_text(self, text):
 #         return text[:self.max_message_length].rsplit(' ', 1)[0] + '...' if len(text) > self.max_message_length else text
@@ -110,26 +116,25 @@
 #     def check_toxicity(self, text, guild_id):
 #         guild_config = mod_data[guild_id]
         
-#         scores = {
-#             "primary": self._analyze_with_model("primary", text),
-#             "secondary": self._analyze_with_model("secondary", text)
+#         primary_score = self._analyze_with_model("primary", text)
+#         secondary_score = self._analyze_with_model("secondary", text)
+        
+#         # Hybrid verification system
+#         if 0.3 < primary_score < 0.4:  # Primary model uncertain
+#             combined_score = (primary_score * 0.6) + (secondary_score * 0.4)
+#         else:  # Trust primary model more
+#             combined_score = primary_score
+        
+#         threshold_breach = (
+#             primary_score > guild_config["thresholds"]["primary"] or
+#             (combined_score > 0.5 and secondary_score > guild_config["thresholds"]["secondary"])
+#         )
+        
+#         return threshold_breach, {
+#             "primary": primary_score,
+#             "secondary": secondary_score,
+#             "combined": combined_score
 #         }
-        
-#         logger.info(f"Toxicity scores: {scores}")
-        
-#         # Check individual thresholds
-#         threshold_breach = any(
-#             scores[model] > guild_config["thresholds"][model]
-#             for model in scores
-#         )
-        
-#         # Calculate weighted score
-#         weighted_score = sum(
-#             scores[model] * guild_config["weights"][model]
-#             for model in scores
-#         )
-        
-#         return threshold_breach or weighted_score > 0.5, scores
 
 #     async def handle_toxic_message(self, message, scores):
 #         try:
@@ -142,7 +147,6 @@
 #             logger.warning("Message already deleted")
 #             return
 
-#         # Warning system
 #         guild_id = message.guild.id
 #         user_id = message.author.id
 #         mod_data[guild_id]["warnings"][user_id] += 1
@@ -150,11 +154,11 @@
 
 #         actions = {
 #             1: lambda: message.channel.send(
-#                 f"⚠️ {message.author.mention}, first warning (1/3).",
+#                 f"⚠ {message.author.mention}, first warning (1/3).",
 #                 delete_after=10
 #             ),
 #             2: lambda: message.channel.send(
-#                 f"⚠️ {message.author.mention}, second warning (2/3).",
+#                 f"⚠ {message.author.mention}, second warning (2/3).",
 #                 delete_after=10
 #             ),
 #             3: lambda: message.author.timeout(
@@ -169,28 +173,36 @@
 
 #         try:
 #             if warnings in actions:
-#                 await actions[warnings]()
+#                 if warnings >= 3:
+#                     await actions[warnings]()
+#                 else:
+#                     await actions[warnings]()
 #         except discord.Forbidden:
 #             logger.error(f"Missing permissions to punish {message.author}")
 #             await message.channel.send("❌ Missing moderation permissions!", delete_after=10)
 
-#         # Logging
 #         log_channel = discord.utils.get(message.guild.channels, name="mod-logs") or \
 #                      await self.create_mod_logs(message.guild)
         
 #         if log_channel:
 #             embed = discord.Embed(
 #                 title="🚨 Content Moderated",
-#                 description=f"**User:** {message.author.mention}\n**Action Taken:** {actions.get(warnings, 'Warning')}",
+#                 description=f"*User:* {message.author.mention}\n*Action Taken:* {actions.get(warnings, 'Warning')}",
 #                 color=discord.Color.red()
 #             )
 #             embed.add_field(name="Message", value=self._truncate_text(message.content), inline=False)
-#             embed.add_field(name="Scores", value=f"Primary: {scores['primary']:.2f}\nSecondary: {scores['secondary']:.2f}", inline=False)
+#             embed.add_field(name="Scores", 
+#                           value=f"Primary: {scores['primary']:.2f}\nSecondary: {scores['secondary']:.2f}\nCombined: {scores['combined']:.2f}", 
+#                           inline=False)
 #             await log_channel.send(embed=embed)
 
 #     @commands.Cog.listener()
 #     async def on_message(self, message):
 #         if message.author.bot or not message.guild:
+#             return
+
+#         # Check allowlist first
+#         if any(message.content.startswith(cmd) for cmd in COMMAND_ALLOWLIST):
 #             return
 
 #         guild_id = message.guild.id
@@ -205,7 +217,7 @@
 #     @commands.has_permissions(administrator=True)
 #     async def mod_settings(self, ctx):
 #         if ctx.invoked_subcommand is None:
-#             embed = discord.Embed(title="⚙️ Moderation Settings", color=0x7289DA)
+#             embed = discord.Embed(title="⚙ Moderation Settings", color=0x7289DA)
 #             settings = mod_data[ctx.guild.id]
 #             embed.add_field(name="Status", value="✅ Enabled" if settings["enabled"] else "❌ Disabled", inline=False)
 #             embed.add_field(
@@ -224,7 +236,7 @@
 #     async def toggle_moderation(self, ctx):
 #         mod_data[ctx.guild.id]["enabled"] = not mod_data[ctx.guild.id]["enabled"]
 #         status = "enabled" if mod_data[ctx.guild.id]["enabled"] else "disabled"
-#         await ctx.send(f"🛡️ Moderation system {status}", delete_after=10)
+#         await ctx.send(f"🛡 Moderation system {status}", delete_after=10)
 
 #     @mod_settings.command(name="set_threshold")
 #     async def set_threshold(self, ctx, model_name: str, threshold: float):
@@ -246,7 +258,6 @@
 #             return await ctx.send("❌ Weight must be between 0.0 and 1.0")
         
 #         mod_data[ctx.guild.id]["weights"][model_name] = round(weight, 2)
-#         # Automatically adjust other weight
 #         other_model = "secondary" if model_name == "primary" else "primary"
 #         mod_data[ctx.guild.id]["weights"][other_model] = round(1.0 - weight, 2)
         
@@ -258,18 +269,49 @@
 #         )
 
 #     @commands.command(name="checktox")
-#     async def check_toxicity(self, ctx, *, text):
+#     async def check_toxicity_command(self, ctx, *, text):
 #         is_toxic, scores = self.check_toxicity(text, ctx.guild.id)
 #         result = "🚨 TOXIC CONTENT" if is_toxic else "✅ CLEAN"
-#         embed = discord.Embed(title="🔍 Toxicity Analysis", color=0xFF5555 if is_toxic else 0x55FF55)
+#         embed = discord.Embed(
+#             title="🔍 Toxicity Analysis",
+#             color=0xFF5555 if is_toxic else 0x55FF55
+#         )
 #         embed.add_field(name="Result", value=result, inline=False)
 #         embed.add_field(name="Primary Score", value=f"{scores['primary']:.4f}", inline=True)
 #         embed.add_field(name="Secondary Score", value=f"{scores['secondary']:.4f}", inline=True)
-#         embed.set_footer(text="Thresholds: Primary - {:.2f}, Secondary - {:.2f}".format(
-#             mod_data[ctx.guild.id]["thresholds"]["primary"],
-#             mod_data[ctx.guild.id]["thresholds"]["secondary"]
-#         ))
+#         embed.add_field(name="Combined Score", value=f"{scores['combined']:.4f}", inline=False)
+#         embed.set_footer(text=f"Thresholds: Primary - {mod_data[ctx.guild.id]['thresholds']['primary']:.2f}, Secondary - {mod_data[ctx.guild.id]['thresholds']['secondary']:.2f}")
 #         await ctx.send(embed=embed, delete_after=20)
+
+#     @commands.command(name="analyze")
+#     async def detailed_analysis(self, ctx, *, text):
+#         # Get primary model score
+#         primary_score = self._analyze_with_model("primary", text)
+        
+#         # Get secondary model breakdown
+#         inputs = tokenizers["secondary"](
+#             text,
+#             return_tensors="pt",
+#             truncation=True,
+#             max_length=512
+#         )
+#         with torch.no_grad():
+#             outputs = models["secondary"](**inputs)
+#         secondary_scores = torch.nn.functional.softmax(outputs.logits, dim=1)[0]
+        
+#         label_scores = {
+#             label: secondary_scores[i].item()
+#             for i, label in enumerate(models["secondary"].config.id2label.values())
+#         }
+        
+#         embed = discord.Embed(title="🧪 Detailed Analysis", color=0x7289DA)
+#         embed.add_field(name="Primary Score", value=f"{primary_score:.4f}", inline=False)
+#         embed.add_field(
+#             name="Secondary Model Breakdown",
+#             value="\n".join([f"• {k}: {v:.4f}" for k, v in label_scores.items()]),
+#             inline=False
+#         )
+#         await ctx.send(embed=embed, delete_after=30)
 
 # async def setup(bot):
 #     await bot.add_cog(AdvancedModeration(bot))
@@ -444,60 +486,73 @@
 # async def setup(bot):
 #     await bot.add_cog(AdvancedModeration(bot))
 
+
+#### WORKS
 import discord
 from discord.ext import commands
 import torch
 import logging
 from transformers import AutoTokenizer, AutoModelForSequenceClassification
 from collections import defaultdict
+import datetime
 
-# Setup logging
+# Configure logging
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)
 
-# Model setup
-MODEL_NAME = "SkolkovoInstitute/roberta_toxicity_classifier"
-TOXIC_THRESHOLD = 0.35  # You can adjust this
-TOXIC_INDEX = 1
+# Model configuration
+MODEL_CONFIG = {
+    "primary": {
+        "name": "SkolkovoInstitute/roberta_toxicity_classifier",
+        "type": "binary",
+        "base_threshold": 0.4  # Slightly increased threshold
+    }
+}
 
-# Load tokenizer and model
+# Protected command allowlist
+COMMAND_ALLOWLIST = ["!help", "!info", "!support", "!about"]
+
+# Load model and tokenizer
 try:
-    tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)
-    model = AutoModelForSequenceClassification.from_pretrained(MODEL_NAME)
-    logger.info("Toxicity model loaded successfully.")
+    tokenizer = AutoTokenizer.from_pretrained(MODEL_CONFIG["primary"]["name"])
+    model = AutoModelForSequenceClassification.from_pretrained(MODEL_CONFIG["primary"]["name"])
+    logger.info("Successfully loaded primary model")
 except Exception as e:
-    logger.error(f"Error loading model: {e}")
-    raise RuntimeError("Model loading failed.")
+    logger.error(f"Failed to load model: {str(e)}")
+    raise RuntimeError("Model loading failed")
 
-# Per-guild moderation data
+# Moderation system storage
 mod_data = defaultdict(lambda: {
     "warnings": defaultdict(int),
     "enabled": True,
-    "threshold": TOXIC_THRESHOLD
+    "threshold": MODEL_CONFIG["primary"]["base_threshold"]
 })
 
-class AdvancedModeration(commands.Cog):
-    def __init__(self, bot):
+class SimpleModeration(commands.Cog):
+    def __init__(self, bot: commands.Bot):
+        # Initialize required attributes FIRST
         self.bot = bot
-        self.max_length = 500  # Limit for long messages
-
-    def _truncate(self, text):
-        return text[:self.max_length].rsplit(' ', 1)[0] + '...' if len(text) > self.max_length else text
-
-    def check_toxicity(self, text, guild_id):
-        try:
-            inputs = tokenizer(text, return_tensors="pt", truncation=True, max_length=512)
-            with torch.no_grad():
-                outputs = model(**inputs)
-            score = torch.sigmoid(outputs.logits)[0][TOXIC_INDEX].item()
-            logger.info(f"Toxicity score for guild {guild_id}: {score}")
-            return score >= mod_data[guild_id]["threshold"]
-        except Exception as e:
-            logger.error(f"Toxicity check failed: {e}")
-            return False
+        self.max_message_length = 500  # Max characters before truncation
+        self.log_channel_name = "mod-logs"  # Optional but recommended
+        
+    def _truncate_text(self, text: str) -> str:
+        """Safely shorten long messages for logging"""
+        if len(text) > self.max_message_length:
+            return text[:self.max_message_length].rsplit(' ', 1)[0] + '...'
+        return text
+    
+    @commands.command(name="check_attrs")
+    async def check_attributes(self, ctx):
+        """Verify class attributes exist"""
+        attrs = {
+            'max_message_length': hasattr(self, 'max_message_length'),
+            'bot': hasattr(self, 'bot'),
+            'log_channel_name': hasattr(self, 'log_channel_name')
+        }
+        await ctx.send(f"Attributes status: {attrs}")
 
     async def create_mod_logs(self, guild):
         try:
@@ -505,48 +560,147 @@ class AdvancedModeration(commands.Cog):
                 "mod-logs",
                 overwrites={
                     guild.default_role: discord.PermissionOverwrite(read_messages=False),
-                    guild.me: discord.PermissionOverwrite(read_messages=True, send_messages=True)
+                    guild.me: discord.PermissionOverwrite(
+                        read_messages=True,
+                        send_messages=True,
+                        manage_channels=True
+                    )
                 },
-                reason="For moderation logs"
+                reason="Moderation logging channel"
             )
         except discord.Forbidden:
-            logger.warning(f"Missing permissions to create mod-logs in {guild.name}")
+            logger.error(f"Missing permissions to create channel in {guild.name}")
             return None
+
+    def check_toxicity(self, text):
+        try:
+            inputs = tokenizer(
+                text,
+                return_tensors="pt",
+                truncation=True,
+                max_length=512
+            )
+            
+            with torch.no_grad():
+                outputs = model(**inputs)
+            
+            score = torch.sigmoid(outputs.logits[0][1]).item()
+            return score
+        except Exception as e:
+            logger.error(f"Analysis error: {str(e)}")
+            return 0.0
+
+    async def handle_toxic_message(self, message, score):
+        try:
+            await message.delete()
+            logger.info(f"Deleted toxic message from {message.author}")
+        except discord.Forbidden:
+            logger.error(f"Missing permissions to delete messages in {message.channel.name}")
+            return
+        except discord.NotFound:
+            logger.warning("Message already deleted")
+            return
+
+        guild_id = message.guild.id
+        user_id = message.author.id
+        mod_data[guild_id]["warnings"][user_id] += 1
+        warnings = mod_data[guild_id]["warnings"][user_id]
+
+        actions = {
+            1: lambda: message.channel.send(
+                f"⚠ {message.author.mention}, first warning (1/3).",
+                delete_after=10
+            ),
+            2: lambda: message.channel.send(
+                f"⚠ {message.author.mention}, second warning (2/3).",
+                delete_after=10
+            ),
+            3: lambda: message.author.timeout(
+                discord.utils.utcnow() + datetime.timedelta(minutes=30),
+                reason="3 warnings"
+            ),
+            4: lambda: message.author.ban(
+                reason="4+ warnings",
+                delete_message_days=1
+            )
+        }
+
+        try:
+            if warnings in actions:
+                if warnings >= 3:
+                    await actions[warnings]()
+                else:
+                    await actions[warnings]()
+        except discord.Forbidden:
+            logger.error(f"Missing permissions to punish {message.author}")
+            await message.channel.send("❌ Missing moderation permissions!", delete_after=10)
+
+        log_channel = discord.utils.get(message.guild.channels, name="mod-logs") or \
+                     await self.create_mod_logs(message.guild)
+        
+        if log_channel:
+            embed = discord.Embed(
+                title="🚨 Content Moderated",
+                description=f"*User:* {message.author.mention}\n*Action Taken:* {actions.get(warnings, 'Warning')}",
+                color=discord.Color.red()
+            )
+            embed.add_field(name="Message", value=self._truncate_text(message.content), inline=False)
+            embed.add_field(name="Toxicity Score", value=f"{score:.2f}", inline=False)
+            await log_channel.send(embed=embed)
 
     @commands.Cog.listener()
     async def on_message(self, message):
         if message.author.bot or not message.guild:
             return
 
+        if any(message.content.startswith(cmd) for cmd in COMMAND_ALLOWLIST):
+            return
+
         guild_id = message.guild.id
         if not mod_data[guild_id]["enabled"]:
             return
 
-        text = self._truncate(message.content)
-        if self.check_toxicity(text, guild_id):
-            mod_data[guild_id]["warnings"][message.author.id] += 1
+        score = self.check_toxicity(message.content)
+        if score > mod_data[guild_id]["threshold"]:
+            await self.handle_toxic_message(message, score)
 
-            try:
-                await message.delete()
-                await message.channel.send(
-                    f"{message.author.mention}, your message was flagged as toxic and has been removed.",
-                    delete_after=10
-                )
-            except discord.Forbidden:
-                logger.warning(f"Missing permissions to delete message or warn user in {message.guild.name}")
+    @commands.group(name="modsettings")
+    @commands.has_permissions(administrator=True)
+    async def mod_settings(self, ctx):
+        if ctx.invoked_subcommand is None:
+            embed = discord.Embed(title="⚙ Moderation Settings", color=0x7289DA)
+            settings = mod_data[ctx.guild.id]
+            embed.add_field(name="Status", value="✅ Enabled" if settings["enabled"] else "❌ Disabled", inline=False)
+            embed.add_field(name="Threshold", value=f"{settings['threshold']:.2f}", inline=False)
+            await ctx.send(embed=embed, delete_after=30)
 
-            mod_channel = discord.utils.get(message.guild.text_channels, name="mod-logs")
-            if not mod_channel:
-                mod_channel = await self.create_mod_logs(message.guild)
+    @mod_settings.command(name="toggle")
+    async def toggle_moderation(self, ctx):
+        mod_data[ctx.guild.id]["enabled"] = not mod_data[ctx.guild.id]["enabled"]
+        status = "enabled" if mod_data[ctx.guild.id]["enabled"] else "disabled"
+        await ctx.send(f"🛡 Moderation system {status}", delete_after=10)
 
-            if mod_channel:
-                await mod_channel.send(
-                    f"🚨 **Toxic Message Removed**\n"
-                    f"👤 **User:** {message.author} ({message.author.id})\n"
-                    f"📝 **Message:** {text}\n"
-                    f"⚠️ **Warnings:** {mod_data[guild_id]['warnings'][message.author.id]}"
-                )
+    @mod_settings.command(name="set_threshold")
+    async def set_threshold(self, ctx, threshold: float):
+        if not 0.1 <= threshold <= 0.9:
+            return await ctx.send("❌ Threshold must be between 0.1 and 0.9")
+        
+        mod_data[ctx.guild.id]["threshold"] = round(threshold, 2)
+        await ctx.send(f"✅ Threshold set to {threshold:.2f}", delete_after=10)
 
-# Setup function for cog
+    @commands.command(name="checktox")
+    async def check_toxicity_command(self, ctx, *, text):
+        score = self.check_toxicity(text)
+        is_toxic = score > mod_data[ctx.guild.id]["threshold"]
+        result = "🚨 TOXIC CONTENT" if is_toxic else "✅ CLEAN"
+        embed = discord.Embed(
+            title="🔍 Toxicity Analysis",
+            color=0xFF5555 if is_toxic else 0x55FF55
+        )
+        embed.add_field(name="Result", value=result, inline=False)
+        embed.add_field(name="Score", value=f"{score:.4f}", inline=False)
+        embed.set_footer(text=f"Threshold: {mod_data[ctx.guild.id]['threshold']:.2f}")
+        await ctx.send(embed=embed, delete_after=20)
+
 async def setup(bot):
-    await bot.add_cog(AdvancedModeration(bot))
+    await bot.add_cog(SimpleModeration(bot))
