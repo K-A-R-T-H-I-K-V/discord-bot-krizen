@@ -151,7 +151,6 @@ import discord
 from discord.ext import commands
 from discord import ui, TextStyle, ButtonStyle
 from datetime import datetime
-import io
 
 class TicketSystem(commands.Cog):
     def __init__(self, bot):
@@ -160,50 +159,45 @@ class TicketSystem(commands.Cog):
         self.ticket_count = 0
 
     # =====================
-    # 🎨 Premium UI Components
+    # 🎨 INTERFACE COMPONENTS
     # =====================
     class TicketCreationView(ui.View):
         def __init__(self, cog):
             super().__init__(timeout=None)
             self.cog = cog
 
-        @ui.button(label="Create Support Ticket", style=ButtonStyle.blurple, 
-                  emoji="📩", custom_id="persistent:create_ticket", row=0)
+        @ui.button(label="Create Ticket", style=ButtonStyle.blurple, 
+                  emoji="📩", custom_id="persistent:create_ticket")
         async def create_ticket(self, interaction: discord.Interaction, button: ui.Button):
             modal = self.cog.TicketReasonModal(self.cog)
             await interaction.response.send_modal(modal)
 
     class TicketReasonModal(ui.Modal):
         def __init__(self, cog):
-            super().__init__(title="🚀 Start Support Session", timeout=300)
+            super().__init__(title="Create Support Ticket", timeout=300)
             self.cog = cog
             self.reason = ui.TextInput(
                 label="Describe your issue",
                 style=TextStyle.long,
-                placeholder="Please provide detailed information...",
-                required=True,
-                max_length=1000
+                placeholder="Please explain your problem in detail...",
+                required=True
             )
             self.add_item(self.reason)
 
         async def on_submit(self, interaction: discord.Interaction):
             await interaction.response.defer(ephemeral=True)
             try:
-                ticket_channel = await self.cog.create_ticket_channel(
-                    interaction.user, 
-                    interaction.guild, 
-                    str(self.reason)
-                )
+                ticket_channel = await self.cog.create_ticket_channel(interaction.user, interaction.guild, str(self.reason))
                 embed = discord.Embed(
-                    title="Ticket Created Successfully!",
-                    description=f"Visit your dedicated channel: {ticket_channel.mention}",
+                    title="Ticket Created",
+                    description=f"Visit your private channel: {ticket_channel.mention}",
                     color=0x00ff00
                 )
                 await interaction.followup.send(embed=embed, ephemeral=True)
             except Exception as e:
                 error_embed = discord.Embed(
-                    title="⚠️ Creation Failed",
-                    description="Couldn't create ticket. Please contact staff.",
+                    title="Error",
+                    description="Failed to create ticket",
                     color=0xff0000
                 )
                 await interaction.followup.send(embed=error_embed, ephemeral=True)
@@ -213,44 +207,58 @@ class TicketSystem(commands.Cog):
             super().__init__(timeout=None)
             self.cog = cog
 
-        @ui.button(label="Close Ticket", style=ButtonStyle.red, emoji="🔒", 
-                  custom_id="persistent:close_ticket", row=0)
+        @ui.button(label="Close Ticket", style=ButtonStyle.red, 
+                  emoji="🔒", custom_id="persistent:close_ticket")
         async def close_ticket(self, interaction: discord.Interaction, button: ui.Button):
             if not interaction.user.guild_permissions.administrator:
-                return await interaction.response.send_message(
-                    embed=discord.Embed(
-                        title="Permission Denied",
-                        description="🔒 Only staff can close tickets.",
-                        color=0xff0000
-                    ),
-                    ephemeral=True
+                embed = discord.Embed(
+                    title="Permission Denied",
+                    description="Only staff can close tickets",
+                    color=0xff0000
                 )
-
-            confirm_embed = discord.Embed(
-                title="Confirm Closure",
-                description="Are you sure you want to close this ticket?",
-                color=0xffd700
-            )
+                return await interaction.response.send_message(embed=embed, ephemeral=True)
+            
+            confirm_view = self.cog.ConfirmationView(self.cog)
             await interaction.response.send_message(
-                embed=confirm_embed,
-                view=self.cog.ConfirmationView(self.cog),
+                embed=discord.Embed(
+                    title="Confirm Closure",
+                    description="Are you sure you want to close this ticket?",
+                    color=0xffd700
+                ),
+                view=confirm_view,
                 ephemeral=True
             )
-
-        @ui.button(label="Add Participant", style=ButtonStyle.green, emoji="👥", 
-                  custom_id="persistent:add_user", row=0)
-        async def add_user(self, interaction: discord.Interaction, button: ui.Button):
-            if not interaction.user.guild_permissions.administrator:
-                return await interaction.response.send_message(
+            
+            await confirm_view.wait()
+            
+            if confirm_view.value:
+                try:
+                    await interaction.edit_original_response(
+                        embed=discord.Embed(
+                            title="Closing Ticket...",
+                            color=0x7289da
+                        ),
+                        view=None
+                    )
+                    await self.cog.close_ticket(interaction.channel, interaction.user)
+                except Exception as e:
+                    await interaction.followup.send(
+                        embed=discord.Embed(
+                            title="Error",
+                            description="Failed to close ticket",
+                            color=0xff0000
+                        ),
+                        ephemeral=True
+                    )
+            else:
+                await interaction.edit_original_response(
                     embed=discord.Embed(
-                        title="Permission Denied",
-                        description="🔒 Only staff can manage tickets.",
-                        color=0xff0000
+                        title="Cancelled",
+                        description="Ticket closure cancelled",
+                        color=0x00ff00
                     ),
-                    ephemeral=True
+                    view=None
                 )
-
-            await interaction.response.send_modal(self.cog.AddUserModal(self.cog))
 
     class ConfirmationView(ui.View):
         def __init__(self, cog):
@@ -270,37 +278,8 @@ class TicketSystem(commands.Cog):
             await interaction.response.defer()
             self.stop()
 
-    class AddUserModal(ui.Modal):
-        def __init__(self, cog):
-            super().__init__(title="➕ Add Participant", timeout=300)
-            self.cog = cog
-            self.user = ui.TextInput(
-                label="User to Add",
-                placeholder="Enter user @mention or ID",
-                required=True
-            )
-            self.add_item(self.user)
-
-        async def on_submit(self, interaction: discord.Interaction):
-            try:
-                user = await commands.MemberConverter().convert(interaction, str(self.user))
-                await interaction.channel.set_permissions(user, read_messages=True)
-                success_embed = discord.Embed(
-                    title="User Added",
-                    description=f"✅ {user.mention} can now access this ticket",
-                    color=0x00ff00
-                )
-                await interaction.response.send_message(embed=success_embed, ephemeral=True)
-            except:
-                error_embed = discord.Embed(
-                    title="Invalid User",
-                    description="❌ Couldn't find that user",
-                    color=0xff0000
-                )
-                await interaction.response.send_message(embed=error_embed, ephemeral=True)
-
     # =====================
-    # 🚀 Core Operations
+    # 🛠️ CORE FUNCTIONALITY
     # =====================
     async def create_ticket_channel(self, user: discord.User, guild: discord.Guild, reason: str):
         category = await self.get_or_create_category(guild)
@@ -315,27 +294,25 @@ class TicketSystem(commands.Cog):
         ticket_channel = await category.create_text_channel(
             name=f"ticket-{self.ticket_count}",
             overwrites=overwrites,
-            topic=f"User: {user} | Reason: {reason[:75]}"
+            topic=f"{user.name} | {reason[:50]}"
         )
 
-        main_embed = discord.Embed(
+        embed = discord.Embed(
             title=f"Ticket #{self.ticket_count}",
-            description=f"**Created by:** {user.mention}\n**Reason:** {reason}",
+            description=f"**User:** {user.mention}\n**Reason:** {reason}",
             color=0x7289da
         )
-        main_embed.add_field(
-            name="Channel Info",
-            value=f"• Created: {discord.utils.format_dt(datetime.now(), 'f')}\n"
-                  f"• Status: 🟢 Active",
+        embed.add_field(
+            name="Information",
+            value=f"Created: {discord.utils.format_dt(datetime.now(), 'f')}\nStatus: 🟢 Open",
             inline=False
         )
-        main_embed.set_footer(text="Support Team")
-
-        control_view = self.TicketControlView(self)
+        
+        view = self.TicketControlView(self)
         await ticket_channel.send(
             content=f"{user.mention} | Support Team",
-            embed=main_embed,
-            view=control_view
+            embed=embed,
+            view=view
         )
         self.tickets[user.id] = ticket_channel.id
         return ticket_channel
@@ -350,20 +327,26 @@ class TicketSystem(commands.Cog):
                 description="Thank you for contacting support!",
                 color=0x00ff00
             )
-            await user.send(embed=closure_embed)
+            try:
+                await user.send(embed=closure_embed)
+            except:
+                pass
             
             del self.tickets[user_id]
-            await channel.delete(reason=f"Closed by {closer}")
+            try:
+                await channel.delete()
+            except discord.NotFound:
+                pass
         except Exception as e:
             error_embed = discord.Embed(
-                title="Closure Error",
+                title="Error",
                 description="Failed to close ticket properly",
                 color=0xff0000
             )
             await channel.send(embed=error_embed)
 
     # =====================
-    # 🔧 Utilities
+    # ⚙️ UTILITIES
     # =====================
     async def get_or_create_category(self, guild: discord.Guild):
         category = discord.utils.get(guild.categories, name="Support Tickets")
@@ -374,41 +357,38 @@ class TicketSystem(commands.Cog):
             guild.default_role: discord.PermissionOverwrite(read_messages=False),
             guild.me: discord.PermissionOverwrite(read_messages=True)
         }
-        return await guild.create_category_channel(
+        return await guild.create_category(
             name="Support Tickets",
             overwrites=overwrites,
-            reason="Ticket system initialization"
+            reason="Ticket system setup"
         )
 
     # =====================
-    # 💻 Commands & Setup
+    # 💻 COMMANDS
     # =====================
     @commands.command()
     @commands.has_permissions(administrator=True)
     async def ticketpanel(self, ctx: commands.Context):
         """Create the ticket creation panel"""
-        panel_embed = discord.Embed(
-            title="Need Assistance?",
-            description="Click below to create a support ticket!\n"
-                        "Our team will help you shortly.",
+        embed = discord.Embed(
+            title="Need Help?",
+            description="Click below to create a support ticket!",
             color=0x7289da
         )
-        panel_embed.add_field(
+        embed.add_field(
             name="Guidelines",
-            value="• Be specific with your issue\n"
-                  "• Stay respectful\n"
-                  "• Don't share sensitive info",
+            value="• Be specific with your issue\n• Stay respectful\n• No spam",
             inline=False
         )
         view = self.TicketCreationView(self)
-        await ctx.send(embed=panel_embed, view=view)
+        await ctx.send(embed=embed, view=view)
         await ctx.message.delete()
 
     @commands.Cog.listener()
     async def on_ready(self):
         self.bot.add_view(self.TicketCreationView(self))
         self.bot.add_view(self.TicketControlView(self))
-        print(f"Ticket System Ready | Loaded {self.ticket_count} active tickets")
+        print(f"Ticket system ready! Active tickets: {len(self.tickets)}")
 
 async def setup(bot):
     await bot.add_cog(TicketSystem(bot))
