@@ -32,7 +32,8 @@ async def load_cogs():
         "cogs.roles",
         "cogs.events",
         "cogs.welcome_farewell",  # ✅ Added new cog for Welcome & Farewell system
-        "cogs.ai_powered_moderation"
+        "cogs.ai_powered_moderation",
+        "cogs.ticketsystem"
     ]
     
     for cog in cogs:
@@ -49,3 +50,5 @@ async def main():
         await bot.start(TOKEN)
 
 asyncio.run(main())
+
+
