@@ -490,11 +490,18 @@
 #### WORKS
 import discord
 from discord.ext import commands
-import torch
 import logging
-from transformers import AutoTokenizer, AutoModelForSequenceClassification
-from collections import defaultdict
-import datetime
+import sqlite3
+import re
+import json
+import random
+import aiohttp
+import asyncio
+from detoxify import Detoxify
+from vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer
+from datetime import datetime, timedelta
+import datetime as dt
+import os
 
 # Configure logging
 logging.basicConfig(
@@ -503,58 +510,166 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Model configuration
-MODEL_CONFIG = {
-    "primary": {
-        "name": "SkolkovoInstitute/roberta_toxicity_classifier",
-        "type": "binary",
-        "base_threshold": 0.4  # Slightly increased threshold
+# Default profanity dictionary
+DEFAULT_PROFANITY = {
+    "profanity": {
+        "fuck": ["fk", "fck", "fuk", "phuck"],
+        "nigger": ["nigga", "n*gga", "nigg*r"],
+        "bitch": ["b*tch", "biatch", "bich"],
+        "shit": ["sh*t", "sht"],
+        "asshole": ["a*shole", "assh*le"]
+    },
+    "contextual_slurs": {
+        "nigga": {
+            "allowed_roles": ["Trusted Member"],
+            "allowed_channels": ["nsfw-chat"]
+        }
     }
 }
+
+# Load or create profanity dictionary
+def load_profanity_db():
+    try:
+        with open("profanity.json", "r") as f:
+            return json.load(f)
+    except FileNotFoundError:
+        logger.warning("profanity.json not found. Creating default file.")
+        with open("profanity.json", "w") as f:
+            json.dump(DEFAULT_PROFANITY, f, indent=4)
+        return DEFAULT_PROFANITY
+    except json.JSONDecodeError:
+        logger.error("Invalid profanity.json. Using default dictionary.")
+        return DEFAULT_PROFANITY
+
+PROFANITY_DB = load_profanity_db()
 
 # Protected command allowlist
 COMMAND_ALLOWLIST = ["!help", "!info", "!support", "!about"]
 
-# Load model and tokenizer
-try:
-    tokenizer = AutoTokenizer.from_pretrained(MODEL_CONFIG["primary"]["name"])
-    model = AutoModelForSequenceClassification.from_pretrained(MODEL_CONFIG["primary"]["name"])
-    logger.info("Successfully loaded primary model")
-except Exception as e:
-    logger.error(f"Failed to load model: {str(e)}")
-    raise RuntimeError("Model loading failed")
-
-# Moderation system storage
-mod_data = defaultdict(lambda: {
-    "warnings": defaultdict(int),
-    "enabled": True,
-    "threshold": MODEL_CONFIG["primary"]["base_threshold"]
-})
-
 class SimpleModeration(commands.Cog):
     def __init__(self, bot: commands.Bot):
-        # Initialize required attributes FIRST
         self.bot = bot
-        self.max_message_length = 500  # Max characters before truncation
-        self.log_channel_name = "mod-logs"  # Optional but recommended
+        self.max_message_length = 500
+        self.log_channel_name = "mod-logs"
+        self.sentiment_analyzer = SentimentIntensityAnalyzer()
+        self.detoxify_model = None
         
+        # Initialize SQLite database
+        self.db = sqlite3.connect("moderation.db")
+        self.db.execute("""
+            CREATE TABLE IF NOT EXISTS settings (
+                guild_id INTEGER PRIMARY KEY,
+                enabled BOOLEAN,
+                threshold FLOAT
+            )
+        """)
+        self.db.execute("""
+            CREATE TABLE IF NOT EXISTS warnings (
+                guild_id INTEGER,
+                user_id INTEGER,
+                warnings INTEGER,
+                PRIMARY KEY (guild_id, user_id)
+            )
+        """)
+        self.db.commit()
+
+    async def load_detoxify_model(self):
+        """Asynchronously load the Detoxify model."""
+        try:
+            logger.info("Loading Detoxify model...")
+            self.detoxify_model = Detoxify('unbiased')
+            logger.info("Detoxify model loaded successfully")
+        except Exception as e:
+            logger.error(f"Failed to load Detoxify model: {str(e)}. Falling back to profanity filter.")
+            self.detoxify_model = None
+
+    async def cog_load(self):
+        """Called when the cog is loaded."""
+        await self.load_detoxify_model()
+
     def _truncate_text(self, text: str) -> str:
-        """Safely shorten long messages for logging"""
         if len(text) > self.max_message_length:
             return text[:self.max_message_length].rsplit(' ', 1)[0] + '...'
         return text
-    
-    @commands.command(name="check_attrs")
-    async def check_attributes(self, ctx):
-        """Verify class attributes exist"""
-        attrs = {
-            'max_message_length': hasattr(self, 'max_message_length'),
-            'bot': hasattr(self, 'bot'),
-            'log_channel_name': hasattr(self, 'log_channel_name')
-        }
-        await ctx.send(f"Attributes status: {attrs}")
 
-    async def create_mod_logs(self, guild):
+    def normalize_text(self, text: str) -> str:
+        """Normalize text by converting to lowercase and replacing profanity variants."""
+        text = text.lower()
+        for word, variants in PROFANITY_DB["profanity"].items():
+            patterns = [re.escape(word)] + [re.escape(v) for v in variants]
+            pattern = r'(' + '|'.join(patterns) + r')'
+            text = re.sub(pattern, word, text, flags=re.IGNORECASE)
+        return text
+
+    def check_profanity(self, text: str, message: discord.Message = None) -> float:
+        """Check if text contains profanity and apply contextual rules."""
+        normalized_text = self.normalize_text(text)
+        logger.debug(f"Normalized text: {normalized_text}")
+        for word in PROFANITY_DB["profanity"]:
+            if word in normalized_text.split():
+                logger.info(f"Profanity detected: {word}")
+                if message is None:
+                    return 1.0
+                contextual = PROFANITY_DB.get("contextual_slurs", {}).get(word, {})
+                allowed_roles = contextual.get("allowed_roles", [])
+                allowed_channels = contextual.get("allowed_channels", [])
+                if any(role.name in allowed_roles for role in message.author.roles) or \
+                   message.channel.name in allowed_channels:
+                    logger.info(f"Profanity '{word}' allowed in context")
+                    return 0.0
+                return 1.0
+        logger.debug(f"No profanity detected in: {normalized_text}")
+        return None
+
+    def check_toxicity(self, text: str) -> float:
+        profanity_score = self.check_profanity(text)
+        if profanity_score is not None:
+            return profanity_score
+        if not self.detoxify_model:
+            logger.warning("Detoxify model unavailable. Using profanity filter only.")
+            return 0.0
+        try:
+            results = self.detoxify_model.predict(text)
+            score = max(results["toxicity"], results["identity_attack"])
+            return score
+        except Exception as e:
+            logger.error(f"Detoxify prediction error: {str(e)}")
+            return 0.0
+
+    def check_sentiment(self, text: str) -> float:
+        scores = self.sentiment_analyzer.polarity_scores(text)
+        return scores["compound"]
+
+    def get_guild_settings(self, guild_id: int) -> dict:
+        cursor = self.db.cursor()
+        cursor.execute("SELECT enabled, threshold FROM settings WHERE guild_id = ?", (guild_id,))
+        result = cursor.fetchone()
+        if result:
+            return {"enabled": bool(result[0]), "threshold": result[1]}
+        return {"enabled": True, "threshold": 0.4}
+
+    def update_guild_settings(self, guild_id: int, enabled: bool, threshold: float):
+        cursor = self.db.cursor()
+        cursor.execute("INSERT OR REPLACE INTO settings (guild_id, enabled, threshold) VALUES (?, ?, ?)",
+                      (guild_id, enabled, threshold))
+        self.db.commit()
+
+    def get_warnings(self, guild_id: int, user_id: int) -> int:
+        cursor = self.db.cursor()
+        cursor.execute("SELECT warnings FROM warnings WHERE guild_id = ? AND user_id = ?",
+                      (guild_id, user_id))
+        result = cursor.fetchone()
+        return result[0] if result else 0
+
+    def add_warning(self, guild_id: int, user_id: int) -> int:
+        warnings = self.get_warnings(guild_id, user_id) + 1
+        cursor = self.db.cursor()
+        cursor.execute("INSERT OR REPLACE INTO warnings (guild_id, user_id, warnings) VALUES (?, ?, ?)",
+                      (guild_id, user_id, warnings))
+        self.db.commit()
+        return warnings
+
+    async def create_mod_logs(self, guild: discord.Guild) -> discord.TextChannel:
         try:
             return await guild.create_text_channel(
                 "mod-logs",
@@ -572,25 +687,7 @@ class SimpleModeration(commands.Cog):
             logger.error(f"Missing permissions to create channel in {guild.name}")
             return None
 
-    def check_toxicity(self, text):
-        try:
-            inputs = tokenizer(
-                text,
-                return_tensors="pt",
-                truncation=True,
-                max_length=512
-            )
-            
-            with torch.no_grad():
-                outputs = model(**inputs)
-            
-            score = torch.sigmoid(outputs.logits[0][1]).item()
-            return score
-        except Exception as e:
-            logger.error(f"Analysis error: {str(e)}")
-            return 0.0
-
-    async def handle_toxic_message(self, message, score):
+    async def handle_toxic_message(self, message: discord.Message, score: float):
         try:
             await message.delete()
             logger.info(f"Deleted toxic message from {message.author}")
@@ -603,8 +700,24 @@ class SimpleModeration(commands.Cog):
 
         guild_id = message.guild.id
         user_id = message.author.id
-        mod_data[guild_id]["warnings"][user_id] += 1
-        warnings = mod_data[guild_id]["warnings"][user_id]
+        warnings = self.add_warning(guild_id, user_id)
+
+        # Log to mod-logs first to ensure it happens
+        log_channel = discord.utils.get(message.guild.channels, name="mod-logs") or \
+                     await self.create_mod_logs(message.guild)
+        if log_channel:
+            embed = discord.Embed(
+                title="🚨 Content Moderated",
+                description=f"*User:* {message.author.mention}\n*Action Taken:* {warnings} warning(s)",
+                color=discord.Color.red(),
+                timestamp=datetime.now(tz=dt.timezone.utc)
+            )
+            embed.add_field(name="Message", value=self._truncate_text(message.content), inline=False)
+            embed.add_field(name="Toxicity Score", value=f"{score:.2f}", inline=False)
+            try:
+                await log_channel.send(embed=embed)
+            except discord.Forbidden:
+                logger.error(f"Missing permissions to send in {log_channel.name}")
 
         actions = {
             1: lambda: message.channel.send(
@@ -616,7 +729,7 @@ class SimpleModeration(commands.Cog):
                 delete_after=10
             ),
             3: lambda: message.author.timeout(
-                discord.utils.utcnow() + datetime.timedelta(minutes=30),
+                datetime.now(tz=dt.timezone.utc) + timedelta(minutes=30),
                 reason="3 warnings"
             ),
             4: lambda: message.author.ban(
@@ -627,71 +740,82 @@ class SimpleModeration(commands.Cog):
 
         try:
             if warnings in actions:
-                if warnings >= 3:
-                    await actions[warnings]()
-                else:
-                    await actions[warnings]()
+                await actions[warnings]()
         except discord.Forbidden:
             logger.error(f"Missing permissions to punish {message.author}")
             await message.channel.send("❌ Missing moderation permissions!", delete_after=10)
 
-        log_channel = discord.utils.get(message.guild.channels, name="mod-logs") or \
-                     await self.create_mod_logs(message.guild)
-        
-        if log_channel:
-            embed = discord.Embed(
-                title="🚨 Content Moderated",
-                description=f"*User:* {message.author.mention}\n*Action Taken:* {actions.get(warnings, 'Warning')}",
-                color=discord.Color.red()
-            )
-            embed.add_field(name="Message", value=self._truncate_text(message.content), inline=False)
-            embed.add_field(name="Toxicity Score", value=f"{score:.2f}", inline=False)
-            await log_channel.send(embed=embed)
-
     @commands.Cog.listener()
-    async def on_message(self, message):
+    async def on_message(self, message: discord.Message):
         if message.author.bot or not message.guild:
             return
-
         if any(message.content.startswith(cmd) for cmd in COMMAND_ALLOWLIST):
             return
-
-        guild_id = message.guild.id
-        if not mod_data[guild_id]["enabled"]:
+        if not message.content or len(message.content.strip()) < 3:
             return
-
+        guild_id = message.guild.id
+        settings = self.get_guild_settings(guild_id)
+        if not settings["enabled"]:
+            return
         score = self.check_toxicity(message.content)
-        if score > mod_data[guild_id]["threshold"]:
+        if score > settings["threshold"]:
             await self.handle_toxic_message(message, score)
+            return
+        sentiment_score = self.check_sentiment(message.content)
+        if sentiment_score > 0.7:
+            await message.add_reaction("😊")
+            if random.random() < 0.1:
+                await message.channel.send(
+                    f"Wow, {message.author.mention}, that's super positive! Keep spreading good vibes! 🌟"
+                )
+        await self.bot.process_commands(message)
 
     @commands.group(name="modsettings")
     @commands.has_permissions(administrator=True)
-    async def mod_settings(self, ctx):
+    async def mod_settings(self, ctx: commands.Context):
         if ctx.invoked_subcommand is None:
+            settings = self.get_guild_settings(ctx.guild.id)
             embed = discord.Embed(title="⚙ Moderation Settings", color=0x7289DA)
-            settings = mod_data[ctx.guild.id]
             embed.add_field(name="Status", value="✅ Enabled" if settings["enabled"] else "❌ Disabled", inline=False)
             embed.add_field(name="Threshold", value=f"{settings['threshold']:.2f}", inline=False)
+            embed.add_field(name="Detoxify Model", value="✅ Loaded" if self.detoxify_model else "❌ Unavailable (Profanity Filter Only)", inline=False)
             await ctx.send(embed=embed, delete_after=30)
 
     @mod_settings.command(name="toggle")
-    async def toggle_moderation(self, ctx):
-        mod_data[ctx.guild.id]["enabled"] = not mod_data[ctx.guild.id]["enabled"]
-        status = "enabled" if mod_data[ctx.guild.id]["enabled"] else "disabled"
+    async def toggle_moderation(self, ctx: commands.Context):
+        settings = self.get_guild_settings(ctx.guild.id)
+        settings["enabled"] = not settings["enabled"]
+        self.update_guild_settings(ctx.guild.id, settings["enabled"], settings["threshold"])
+        status = "enabled" if settings["enabled"] else "disabled"
         await ctx.send(f"🛡 Moderation system {status}", delete_after=10)
 
     @mod_settings.command(name="set_threshold")
-    async def set_threshold(self, ctx, threshold: float):
+    async def set_threshold(self, ctx: commands.Context, threshold: float):
         if not 0.1 <= threshold <= 0.9:
             return await ctx.send("❌ Threshold must be between 0.1 and 0.9")
-        
-        mod_data[ctx.guild.id]["threshold"] = round(threshold, 2)
+        settings = self.get_guild_settings(ctx.guild.id)
+        settings["threshold"] = round(threshold, 2)
+        self.update_guild_settings(ctx.guild.id, settings["enabled"], settings["threshold"])
         await ctx.send(f"✅ Threshold set to {threshold:.2f}", delete_after=10)
 
+    @commands.command(name="addprofanity")
+    @commands.has_permissions(administrator=True)
+    async def add_profanity(self, ctx: commands.Context, word: str, *variants):
+        PROFANITY_DB["profanity"][word.lower()] = list(variants)
+        try:
+            with open("profanity.json", "w") as f:
+                json.dump(PROFANITY_DB, f, indent=4)
+            await ctx.send(f"✅ Added '{word}' with variants {variants} to profanity filter.")
+        except Exception as e:
+            logger.error(f"Failed to write profanity.json: {str(e)}")
+            await ctx.send("❌ Failed to update profanity filter.", delete_after=10)
+
     @commands.command(name="checktox")
-    async def check_toxicity_command(self, ctx, *, text):
+    @commands.cooldown(1, 60, commands.BucketType.user)
+    async def check_toxicity_command(self, ctx: commands.Context, *, text: str):
         score = self.check_toxicity(text)
-        is_toxic = score > mod_data[ctx.guild.id]["threshold"]
+        settings = self.get_guild_settings(ctx.guild.id)
+        is_toxic = score > settings["threshold"]
         result = "🚨 TOXIC CONTENT" if is_toxic else "✅ CLEAN"
         embed = discord.Embed(
             title="🔍 Toxicity Analysis",
@@ -699,7 +823,7 @@ class SimpleModeration(commands.Cog):
         )
         embed.add_field(name="Result", value=result, inline=False)
         embed.add_field(name="Score", value=f"{score:.4f}", inline=False)
-        embed.set_footer(text=f"Threshold: {mod_data[ctx.guild.id]['threshold']:.2f}")
+        embed.set_footer(text=f"Threshold: {settings['threshold']:.2f}")
         await ctx.send(embed=embed, delete_after=20)
 
 async def setup(bot):

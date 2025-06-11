@@ -1,0 +1,15 @@
+{
+    "profanity": {
+        "fuck": ["fk", "fck", "fuk", "phuck"],
+        "nigger": ["nigga", "n*gga", "nigg*r"],
+        "bitch": ["b*tch", "biatch", "bich"],
+        "shit": ["sh*t", "sht"],
+        "asshole": ["a*shole", "assh*le"]
+    },
+    "contextual_slurs": {
+        "nigga": {
+            "allowed_roles": ["Trusted Member"],
+            "allowed_channels": ["nsfw-chat"]
+        }
+    }
+}
