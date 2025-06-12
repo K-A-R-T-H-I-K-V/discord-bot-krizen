@@ -426,12 +426,12 @@ class TicketSystem(commands.Cog):
 
                 if confirm_view.value:
                     log_text = await self.cog.log_conversation(interaction.channel)
-                    await self.cog.close_ticket(interaction.channel, interaction.user, log_text)
                     await interaction.followup.send(embed=discord.Embed(
                         title="Ticket Closed",
                         description="Ticket closed and logged",
                         color=0x00cc00
                     ), ephemeral=True)
+                    await self.cog.close_ticket(interaction.channel, interaction.user, log_text)
                 else:
                     await interaction.followup.send(embed=discord.Embed(
                         title="Cancelled",
@@ -440,14 +440,15 @@ class TicketSystem(commands.Cog):
                     ), ephemeral=True)
             except Exception as e:
                 logger.error(f"Close ticket failed: {e}\n{traceback.format_exc()}")
-                try:
-                    await interaction.followup.send(embed=discord.Embed(
-                        title="Error",
-                        description="Failed to close ticket. Please try again.",
-                        color=0xff0000
-                    ), ephemeral=True)
-                except Exception as e2:
-                    logger.error(f"Failed to send error message: {e2}\n{traceback.format_exc()}")
+                if not isinstance(e, discord.errors.HTTPException) or e.code != 10003:
+                    try:
+                        await interaction.followup.send(embed=discord.Embed(
+                            title="Error",
+                            description="Failed to close ticket. Please try again.",
+                            color=0xff0000
+                        ), ephemeral=True)
+                    except Exception as e2:
+                        logger.error(f"Failed to send error message: {e2}\n{traceback.format_exc()}")
 
     class ConfirmationView(ui.View):
         def __init__(self, cog):
@@ -806,10 +807,10 @@ class TicketSystem(commands.Cog):
                     return m.author == ctx.author and m.channel == ctx.channel and m.content.lower() in ['yes', 'no']
                 try:
                     response = await self.bot.wait_for('message', check=check, timeout=30.0)
-                    log_text = None
+                    log_content = None
                     if response.content.lower() == 'yes':
-                        log_text = await self.log_conversation(ctx.channel)
-                    await self.close_ticket(ctx.channel, ctx.author, log_text)
+                        log_content = await self.log_conversation(ctx.channel)
+                    await self.close_ticket(ctx.channel, ctx.author, log_content)
                     await ctx.send(embed=discord.Embed(
                         title="Ticket Closed",
                         description="Ticket closed successfully",
