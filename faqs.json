@@ -1,0 +1,31 @@
+{
+    "faqs": [
+        {
+            "question": "What is the server IP?",
+            "answer": "The server IP is `play.example.com:25565`.",
+            "keywords": [
+                "server ip",
+                "ip address",
+                "connect"
+            ]
+        },
+        {
+            "question": "How do I reset my password?",
+            "answer": "Visit example.com/reset and follow the instructions.",
+            "keywords": [
+                "password",
+                "reset",
+                "login"
+            ]
+        },
+        {
+            "question": "Why am I lagging?",
+            "answer": "Check your ping with `!ping` or restart your router.",
+            "keywords": [
+                "lag",
+                "ping",
+                "connection"
+            ]
+        }
+    ]
+}

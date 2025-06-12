@@ -151,12 +151,157 @@ import discord
 from discord.ext import commands
 from discord import ui, TextStyle, ButtonStyle
 from datetime import datetime
+import json
+import sqlite3
+import logging
+import logging.handlers
+from sentence_transformers import SentenceTransformer, util
+import asyncio
+import os
+import io
+import traceback
+
+# Configure logging with rotation
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.handlers.RotatingFileHandler('ticket.log', maxBytes=10*1024*1024, backupCount=5),
+        logging.StreamHandler()
+    ]
+)
+logger = logging.getLogger(__name__)
+
+# Default FAQs
+DEFAULT_FAQS = {
+    "faqs": [
+        {
+            "question": "What is the server IP?",
+            "answer": "The server IP is `play.example.com:25565`.",
+            "keywords": ["server ip", "ip address", "connect"]
+        },
+        {
+            "question": "How do I reset my password?",
+            "answer": "Visit example.com/reset and follow the instructions.",
+            "keywords": ["password", "reset", "login"]
+        },
+        {
+            "question": "Why am I lagging?",
+            "answer": "Check your ping with `!ping` or restart your router.",
+            "keywords": ["lag", "ping", "connection"]
+        }
+    ]
+}
 
 class TicketSystem(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
         self.tickets = {}
         self.ticket_count = 0
+        self.db = sqlite3.connect("moderation.db")
+        self.setup_db()
+        try:
+            self.model = SentenceTransformer('all-MiniLM-L6-v2')
+            logger.info("SentenceTransformer model loaded successfully")
+        except Exception as e:
+            logger.error(f"Failed to load SentenceTransformer model: {e}")
+            self.model = None
+        self.faqs = self.load_faqs()
+        self.faq_embeddings = self.compute_faq_embeddings()
+        self.staff_role_id = None  # Set to your staff role ID or None for admin-only
+        self.log_channel_id = self.load_log_channel_id()  # Load from config
+        os.makedirs("ticket_logs", exist_ok=True)
+        logger.info("TicketSystem initialized")
+
+    def setup_db(self):
+        """Initialize ticket tracking in SQLite and handle schema migrations."""
+        try:
+            self.db.execute("""
+                CREATE TABLE IF NOT EXISTS tickets (
+                    ticket_id INTEGER PRIMARY KEY,
+                    user_id INTEGER,
+                    channel_id INTEGER,
+                    reason TEXT,
+                    created_at TEXT,
+                    closed_at TEXT,
+                    status TEXT,
+                    log_file TEXT
+                )
+            """)
+            cursor = self.db.cursor()
+            cursor.execute("PRAGMA table_info(tickets)")
+            columns = [info[1] for info in cursor.fetchall()]
+            if 'log_file' not in columns:
+                logger.info("Adding log_file column to tickets table")
+                self.db.execute("ALTER TABLE tickets ADD COLUMN log_file TEXT")
+            self.db.commit()
+            cursor.execute("SELECT MAX(ticket_id) FROM tickets")
+            max_id = cursor.fetchone()[0]
+            self.ticket_count = max_id if max_id is not None else 0
+            logger.debug(f"Database setup complete, ticket_count initialized to {self.ticket_count}")
+        except Exception as e:
+            logger.error(f"Database setup failed: {e}\n{traceback.format_exc()}")
+
+    def load_faqs(self):
+        """Load or create faqs.json."""
+        try:
+            with open("faqs.json", "r") as f:
+                faqs = json.load(f)
+                logger.info("Loaded faqs.json")
+                return faqs.get("faqs", DEFAULT_FAQS["faqs"])
+        except FileNotFoundError:
+            logger.warning("faqs.json not found. Creating default")
+            with open("faqs.json", "w") as f:
+                json.dump(DEFAULT_FAQS, f, indent=2)
+            return DEFAULT_FAQS["faqs"]
+        except Exception as e:
+            logger.error(f"Error loading faqs: {e}\n{traceback.format_exc()}")
+            return DEFAULT_FAQS["faqs"]
+
+    def load_log_channel_id(self):
+        """Load log channel ID from config.json."""
+        try:
+            with open("config.json", "r") as f:
+                config = json.load(f)
+                log_channel_id = config.get("log_channel_id")
+                logger.info(f"Loaded log_channel_id: {log_channel_id}")
+                return log_channel_id
+        except FileNotFoundError:
+            logger.warning("config.json not found. Creating default")
+            with open("config.json", "w") as f:
+                json.dump({"log_channel_id": None}, f, indent=2)
+            return None
+        except Exception as e:
+            logger.error(f"Error loading config: {e}\n{traceback.format_exc()}")
+            return None
+
+    def save_log_channel_id(self, channel_id):
+        """Save log channel ID to config.json."""
+        try:
+            config = {"log_channel_id": channel_id}
+            with open("config.json", "w") as f:
+                json.dump(config, f, indent=2)
+            self.log_channel_id = channel_id
+            logger.info(f"Saved log_channel_id: {channel_id}")
+        except Exception as e:
+            logger.error(f"Error saving log_channel_id: {e}\n{traceback.format_exc()}")
+
+    def compute_faq_embeddings(self):
+        """Compute embeddings for FAQs."""
+        if self.model is None:
+            logger.warning("SentenceTransformer model not available, skipping FAQ embeddings")
+            return None
+        try:
+            questions = [faq["question"] + " " + " ".join(faq["keywords"]) for faq in self.faqs]
+            if not questions:
+                logger.error("No FAQ questions available to compute embeddings")
+                return None
+            embeddings = self.model.encode(questions, batch_size=32, convert_to_tensor=True)
+            logger.debug(f"Computed FAQ embeddings for {len(questions)} FAQs")
+            return embeddings
+        except Exception as e:
+            logger.error(f"Error computing FAQ embeddings: {e}\n{traceback.format_exc()}")
+            return None
 
     # =====================
     # 🎨 INTERFACE COMPONENTS
@@ -166,202 +311,362 @@ class TicketSystem(commands.Cog):
             super().__init__(timeout=None)
             self.cog = cog
 
-        @ui.button(label="Create Ticket", style=ButtonStyle.blurple, 
-                  emoji="📩", custom_id="persistent:create_ticket")
+        @ui.button(label="Create Ticket", style=ButtonStyle.blurple, emoji="📩", custom_id="persistent_create_ticket")
         async def create_ticket(self, interaction: discord.Interaction, button: ui.Button):
-            modal = self.cog.TicketReasonModal(self.cog)
-            await interaction.response.send_modal(modal)
+            try:
+                logger.debug(f"Create ticket button clicked by {interaction.user.id}")
+                if interaction.user.id in self.cog.tickets:
+                    channel_id = self.cog.tickets[interaction.user.id]
+                    try:
+                        channel = await interaction.guild.fetch_channel(channel_id)
+                        await interaction.response.send_message(embed=discord.Embed(
+                            title="Error",
+                            description=f"You already have an open ticket: {channel.mention}",
+                            color=0xff0000
+                        ), ephemeral=True)
+                        return
+                    except discord.NotFound:
+                        logger.warning(f"Channel {channel_id} not found for user {interaction.user.id}. Clearing")
+                        del self.cog.tickets[interaction.user.id]
+                        self.cog.db.execute(
+                            "UPDATE tickets SET status = ?, closed_at = ? WHERE channel_id = ?",
+                            ("closed", datetime.now().isoformat(), channel_id)
+                        )
+                        self.cog.db.commit()
 
-    class TicketReasonModal(ui.Modal):
+                modal = self.cog.TicketModal(self.cog)
+                await interaction.response.send_modal(modal)
+            except Exception as e:
+                logger.error(f"Ticket creation failed: {e}\n{traceback.format_exc()}")
+                try:
+                    await interaction.response.send_message(embed=discord.Embed(
+                        title="Error",
+                        description="Failed to process interaction. Please try again.",
+                        color=0xff0000
+                    ), ephemeral=True)
+                except Exception as e2:
+                    logger.error(f"Failed to send error message: {e2}\n{traceback.format_exc()}")
+
+    class TicketModal(ui.Modal, title="Create Support Ticket"):
         def __init__(self, cog):
-            super().__init__(title="Create Support Ticket", timeout=300)
+            super().__init__(timeout=300)
             self.cog = cog
             self.reason = ui.TextInput(
                 label="Describe your issue",
-                style=TextStyle.long,
-                placeholder="Please explain your problem in detail...",
+                style=TextStyle.short,
+                placeholder="Enter the reason for your ticket...",
                 required=True
             )
             self.add_item(self.reason)
 
         async def on_submit(self, interaction: discord.Interaction):
-            await interaction.response.defer(ephemeral=True)
             try:
-                ticket_channel = await self.cog.create_ticket_channel(interaction.user, interaction.guild, str(self.reason))
-                embed = discord.Embed(
+                await interaction.response.defer(ephemeral=True)
+                logger.debug(f"Ticket modal submitted by {interaction.user.id}")
+                ticket_channel = await self.cog.create_ticket_channel(
+                    interaction.user, interaction.guild, self.reason.value, ""
+                )
+                if self.cog.model and self.cog.faq_embeddings is not None:
+                    suggestion = await self.cog.get_faq_suggestion(self.reason.value)
+                    if suggestion:
+                        await ticket_channel.send(embed=discord.Embed(
+                            title="AI Suggestion",
+                            description=f"Possible solution: {suggestion['answer']}\n\nUse `!suggest` for more or `!close` to close.",
+                            color=0x7289da
+                        ))
+                    else:
+                        logger.debug(f"No FAQ suggestion found for reason: {self.reason.value}")
+                else:
+                    logger.warning("AI model or embeddings unavailable, skipping FAQ suggestion")
+                await interaction.followup.send(embed=discord.Embed(
                     title="Ticket Created",
-                    description=f"Visit your private channel: {ticket_channel.mention}",
-                    color=0x00ff00
-                )
-                await interaction.followup.send(embed=embed, ephemeral=True)
+                    description=f"Your ticket has been created: {ticket_channel.mention}",
+                    color=0x00cc00
+                ), ephemeral=True)
             except Exception as e:
-                error_embed = discord.Embed(
-                    title="Error",
-                    description="Failed to create ticket",
-                    color=0xff0000
-                )
-                await interaction.followup.send(embed=error_embed, ephemeral=True)
+                logger.error(f"Ticket modal failed: {e}\n{traceback.format_exc()}")
+                try:
+                    await interaction.followup.send(embed=discord.Embed(
+                        title="Error",
+                        description="Failed to create ticket. Please try again.",
+                        color=0xff0000
+                    ), ephemeral=True)
+                except Exception as e2:
+                    logger.error(f"Failed to send error message: {e2}\n{traceback.format_exc()}")
 
     class TicketControlView(ui.View):
-        def __init__(self, cog):
+        def __init__(self, cog, ticket_owner_id):
             super().__init__(timeout=None)
             self.cog = cog
+            self.ticket_owner_id = ticket_owner_id
 
-        @ui.button(label="Close Ticket", style=ButtonStyle.red, 
-                  emoji="🔒", custom_id="persistent:close_ticket")
+        @ui.button(label="Close Ticket", style=ButtonStyle.red, emoji="🔒", custom_id="persistent_close_ticket")
         async def close_ticket(self, interaction: discord.Interaction, button: ui.Button):
-            if not interaction.user.guild_permissions.administrator:
-                embed = discord.Embed(
-                    title="Permission Denied",
-                    description="Only staff can close tickets",
-                    color=0xff0000
-                )
-                return await interaction.response.send_message(embed=embed, ephemeral=True)
-            
-            confirm_view = self.cog.ConfirmationView(self.cog)
-            await interaction.response.send_message(
-                embed=discord.Embed(
+            try:
+                await interaction.response.defer(ephemeral=True)
+                logger.debug(f"Close ticket button clicked by {interaction.user.id}")
+                is_admin = interaction.user.guild_permissions.administrator
+                is_owner = interaction.user.id == self.ticket_owner_id
+
+                if not (is_admin or is_owner):
+                    await interaction.followup.send(embed=discord.Embed(
+                        title="Permission Denied",
+                        description="Only staff or the ticket owner can close this ticket",
+                        color=0xff0000
+                    ), ephemeral=True)
+                    return
+
+                confirm_view = self.cog.ConfirmationView(self.cog)
+                await interaction.followup.send(embed=discord.Embed(
                     title="Confirm Closure",
                     description="Are you sure you want to close this ticket?",
                     color=0xffd700
-                ),
-                view=confirm_view,
-                ephemeral=True
-            )
-            
-            await confirm_view.wait()
-            
-            if confirm_view.value:
-                try:
-                    await interaction.edit_original_response(
-                        embed=discord.Embed(
-                            title="Closing Ticket...",
-                            color=0x7289da
-                        ),
-                        view=None
-                    )
-                    await self.cog.close_ticket(interaction.channel, interaction.user)
-                except Exception as e:
-                    await interaction.followup.send(
-                        embed=discord.Embed(
-                            title="Error",
-                            description="Failed to close ticket",
-                            color=0xff0000
-                        ),
-                        ephemeral=True
-                    )
-            else:
-                await interaction.edit_original_response(
-                    embed=discord.Embed(
+                ), view=confirm_view, ephemeral=True)
+                await confirm_view.wait()
+
+                if confirm_view.value:
+                    log_text = await self.cog.log_conversation(interaction.channel)
+                    await self.cog.close_ticket(interaction.channel, interaction.user, log_text)
+                    await interaction.followup.send(embed=discord.Embed(
+                        title="Ticket Closed",
+                        description="Ticket closed and logged",
+                        color=0x00cc00
+                    ), ephemeral=True)
+                else:
+                    await interaction.followup.send(embed=discord.Embed(
                         title="Cancelled",
                         description="Ticket closure cancelled",
-                        color=0x00ff00
-                    ),
-                    view=None
-                )
+                        color=0x00cc00
+                    ), ephemeral=True)
+            except Exception as e:
+                logger.error(f"Close ticket failed: {e}\n{traceback.format_exc()}")
+                try:
+                    await interaction.followup.send(embed=discord.Embed(
+                        title="Error",
+                        description="Failed to close ticket. Please try again.",
+                        color=0xff0000
+                    ), ephemeral=True)
+                except Exception as e2:
+                    logger.error(f"Failed to send error message: {e2}\n{traceback.format_exc()}")
 
     class ConfirmationView(ui.View):
         def __init__(self, cog):
             super().__init__(timeout=30)
             self.cog = cog
-            self.value = None
+            self.value = False
 
         @ui.button(label="Confirm", style=ButtonStyle.green, emoji="✅")
         async def confirm(self, interaction: discord.Interaction, button: ui.Button):
-            self.value = True
-            await interaction.response.defer()
-            self.stop()
+            try:
+                self.value = True
+                await interaction.response.defer(ephemeral=True)
+                self.stop()
+            except Exception as e:
+                logger.error(f"Confirmation failed: {e}\n{traceback.format_exc()}")
 
-        @ui.button(label="Cancel", style=ButtonStyle.grey, emoji="❌")
+        @ui.button(label="Cancel", style=ButtonStyle.grey, emoji="🔴")
         async def cancel(self, interaction: discord.Interaction, button: ui.Button):
-            self.value = False
-            await interaction.response.defer()
-            self.stop()
+            try:
+                self.value = False
+                await interaction.response.defer(ephemeral=True)
+                self.stop()
+            except Exception as e:
+                logger.error(f"Cancel failed: {e}\n{traceback.format_exc()}")
 
     # =====================
     # 🛠️ CORE FUNCTIONALITY
     # =====================
-    async def create_ticket_channel(self, user: discord.User, guild: discord.Guild, reason: str):
-        category = await self.get_or_create_category(guild)
-        self.ticket_count += 1
-
-        overwrites = {
-            guild.default_role: discord.PermissionOverwrite(read_messages=False),
-            user: discord.PermissionOverwrite(read_messages=True, send_messages=True),
-            guild.me: discord.PermissionOverwrite(read_messages=True)
-        }
-
-        ticket_channel = await category.create_text_channel(
-            name=f"ticket-{self.ticket_count}",
-            overwrites=overwrites,
-            topic=f"{user.name} | {reason[:50]}"
-        )
-
-        embed = discord.Embed(
-            title=f"Ticket #{self.ticket_count}",
-            description=f"**User:** {user.mention}\n**Reason:** {reason}",
-            color=0x7289da
-        )
-        embed.add_field(
-            name="Information",
-            value=f"Created: {discord.utils.format_dt(datetime.now(), 'f')}\nStatus: 🟢 Open",
-            inline=False
-        )
-        
-        view = self.TicketControlView(self)
-        await ticket_channel.send(
-            content=f"{user.mention} | Support Team",
-            embed=embed,
-            view=view
-        )
-        self.tickets[user.id] = ticket_channel.id
-        return ticket_channel
-
-    async def close_ticket(self, channel: discord.TextChannel, closer: discord.Member):
+    async def create_ticket_channel(self, user: discord.User, guild: discord.Guild, reason: str, attachment: str):
         try:
-            user_id = next(k for k, v in self.tickets.items() if v == channel.id)
+            category = await self.get_or_create_category(guild)
+            self.ticket_count += 1
+
+            staff_role = guild.get_role(self.staff_role_id) if self.staff_role_id else None
+            if not staff_role and self.staff_role_id:
+                logger.warning(f"Staff role ID {self.staff_role_id} not found. Using admins only")
+
+            overwrites = {
+                guild.default_role: discord.PermissionOverwrite(read_messages=False, send_messages=False),
+                user: discord.PermissionOverwrite(read_messages=True, send_messages=True),
+                guild.me: discord.PermissionOverwrite(read_messages=True, send_messages=True, manage_channels=True)
+            }
+            if staff_role:
+                overwrites[staff_role] = discord.PermissionOverwrite(read_messages=True, send_messages=True)
+
+            ticket_channel = await category.create_text_channel(
+                name=f"ticket-{self.ticket_count:04d}",
+                overwrites=overwrites,
+                topic=f"{user.name} | {reason[:50]}"
+            )
+
+            embed = discord.Embed(
+                title=f"Ticket #{self.ticket_count:04d}",
+                description=f"**User:** {user.mention}\n**Reason:** {reason}",
+                color=0x7289da
+            )
+            if attachment:
+                embed.add_field(name="Attachment", value=attachment, inline=False)
+            embed.add_field(
+                name="Information",
+                value=f"Created: {discord.utils.format_dt(datetime.now(), 'f')}\nStatus: 🟢 Open",
+                inline=False
+            )
+
+            view = self.TicketControlView(self, user.id)
+            content = f"{user.mention} | {staff_role.mention if staff_role else 'Support Team'}"
+            await ticket_channel.send(content=content, embed=embed, view=view)
+            self.tickets[user.id] = ticket_channel.id
+
+            self.db.execute(
+                "INSERT INTO tickets (ticket_id, user_id, channel_id, reason, created_at, status, log_file) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                (self.ticket_count, user.id, ticket_channel.id, reason, datetime.now().isoformat(), "open", None)
+            )
+            self.db.commit()
+            logger.debug(f"Created ticket #{self.ticket_count} for user {user.id}")
+            return ticket_channel
+        except Exception as e:
+            logger.error(f"Failed to create ticket channel: {e}\n{traceback.format_exc()}")
+            raise
+
+    async def close_ticket(self, channel: discord.TextChannel, closer: discord.Member, log_text: str = None):
+        try:
+            user_id = next((k for k, v in self.tickets.items() if v == channel.id), None)
+            if user_id is None:
+                logger.error(f"No user found for channel {channel.id}")
+                return
+
+            try:
+                await channel.fetch_message(channel.last_message_id)
+            except discord.NotFound:
+                logger.warning(f"Channel {channel.id} already deleted or inaccessible")
+                return
+
             user = await self.bot.fetch_user(user_id)
-            
             closure_embed = discord.Embed(
                 title="Ticket Closed",
-                description="Thank you for contacting support!",
-                color=0x00ff00
+                description=f"Closed by {closer.mention}. Thank you for contacting support!",
+                color=0x00cc00
             )
             try:
                 await user.send(embed=closure_embed)
             except:
-                pass
-            
-            del self.tickets[user_id]
+                logger.warning(f"Failed to DM {user.name}")
+
+            self.db.execute(
+                "UPDATE tickets SET status = ?, closed_at = ?, log_file = ? WHERE channel_id = ?",
+                ("closed", datetime.now().isoformat(), log_text, channel.id)
+            )
+            self.db.commit()
+
+            if user_id in self.tickets:
+                del self.tickets[user_id]
+
             try:
                 await channel.delete()
+                logger.debug(f"Closed ticket for user {user_id}")
             except discord.NotFound:
-                pass
+                logger.warning(f"Channel {channel.id} already deleted during closure")
         except Exception as e:
-            error_embed = discord.Embed(
-                title="Error",
-                description="Failed to close ticket properly",
-                color=0xff0000
-            )
-            await channel.send(embed=error_embed)
+            logger.error(f"Close ticket failed: {e}\n{traceback.format_exc()}")
+            raise
+
+    async def log_conversation(self, channel: discord.TextChannel):
+        try:
+            log_content = f"Ticket: {channel.name}\n"
+            log_content += f"Created: {discord.utils.format_dt(channel.created_at, 'f')}\n"
+            log_content += f"Topic: {channel.topic or 'No topic'}\n"
+            log_content += "\nMessages:\n"
+            async for message in channel.history(limit=1000, oldest_first=True):
+                timestamp = discord.utils.format_dt(message.created_at, 'f')
+                content = message.content or "[Embed or Attachment]"
+                log_content += f"[{timestamp}] {message.author.name}: {content}\n"
+
+            if self.log_channel_id:
+                try:
+                    log_channel = self.bot.get_channel(self.log_channel_id)
+                    if log_channel is None:
+                        log_channel = await self.bot.fetch_channel(self.log_channel_id)
+                    if log_channel:
+                        embed = discord.Embed(
+                            title=f"Ticket Log: {channel.name}",
+                            description=f"Log for ticket #{channel.name.split('-')[-1]}",
+                            color=0x7289da
+                        )
+                        if len(log_content) > 1900:
+                            log_file = io.StringIO(log_content)
+                            discord_file = discord.File(
+                                log_file,
+                                filename=f"ticket-{channel.name}-{datetime.now().strftime('%Y%m%d-%H%M%S')}.txt"
+                            )
+                            await log_channel.send(embed=embed, file=discord_file)
+                            log_file.close()
+                        else:
+                            embed.description = log_content[:1900]
+                            await log_channel.send(embed=embed)
+                        logger.info(f"Sent conversation log to ticket-logs channel {self.log_channel_id}")
+                        return f"Sent to channel {self.log_channel_id}"
+                    else:
+                        logger.warning(f"Ticket-logs channel {self.log_channel_id} not found")
+                except Exception as e:
+                    logger.error(f"Failed to send log to ticket-logs channel: {e}\n{traceback.format_exc()}")
+
+            log_file = f"ticket_logs/ticket-{channel.name}-{datetime.now().strftime('%Y%m%d-%H%M%S')}.txt"
+            with open(log_file, "w", encoding="utf-8") as f:
+                f.write(log_content)
+            logger.info(f"Logged conversation to {log_file}")
+            return log_file
+        except Exception as e:
+            logger.error(f"Failed to log conversation: {e}\n{traceback.format_exc()}")
+            raise
+
+    async def get_faq_suggestion(self, reason: str):
+        if self.model is None or self.faq_embeddings is None:
+            logger.warning("AI model or embeddings unavailable, cannot provide FAQ suggestion")
+            return None
+        try:
+            if not reason.strip():
+                logger.warning("Empty reason provided for FAQ suggestion")
+                return None
+            reason_embedding = self.model.encode(reason, convert_to_tensor=True)
+            similarities = util.cos_sim(reason_embedding, self.faq_embeddings)[0]
+            max_idx = similarities.argmax().item()
+            similarity_score = similarities[max_idx].item()
+            logger.debug(f"FAQ suggestion: max similarity {similarity_score:.4f} for FAQ index {max_idx} (question: {self.faqs[max_idx]['question']})")
+            if similarity_score > 0.5:
+                return self.faqs[max_idx]
+            return None
+        except Exception as e:
+            logger.error(f"Error in get_faq_suggestion: {e}\n{traceback.format_exc()}")
+            return None
 
     # =====================
     # ⚙️ UTILITIES
     # =====================
     async def get_or_create_category(self, guild: discord.Guild):
-        category = discord.utils.get(guild.categories, name="Support Tickets")
-        if category:
+        try:
+            category = discord.utils.get(guild.categories, name="Support Tickets")
+            if category:
+                return category
+            overwrites = {
+                guild.default_role: discord.PermissionOverwrite(read_messages=False, send_messages=False),
+                guild.me: discord.PermissionOverwrite(read_messages=True, send_messages=True, manage_channels=True)
+            }
+            category = await guild.create_category(name="Support Tickets", overwrites=overwrites)
+            logger.debug("Created Support Tickets category")
             return category
+        except Exception as e:
+            logger.error(f"Failed to create category: {e}\n{traceback.format_exc()}")
+            raise
 
-        overwrites = {
-            guild.default_role: discord.PermissionOverwrite(read_messages=False),
-            guild.me: discord.PermissionOverwrite(read_messages=True)
-        }
-        return await guild.create_category(
-            name="Support Tickets",
-            overwrites=overwrites,
-            reason="Ticket system setup"
-        )
+    async def check_existing_panel(self, channel: discord.TextChannel):
+        try:
+            async for message in channel.history(limit=100):
+                if message.author == channel.guild.me and message.embeds and "Need Help?" in message.embeds[0].title:
+                    return message
+            return None
+        except Exception as e:
+            logger.error(f"Failed to check existing panel: {e}\n{traceback.format_exc()}")
+            return None
 
     # =====================
     # 💻 COMMANDS
@@ -369,30 +674,328 @@ class TicketSystem(commands.Cog):
     @commands.command()
     @commands.has_permissions(administrator=True)
     async def ticketpanel(self, ctx: commands.Context):
-        """Create the ticket creation panel"""
-        embed = discord.Embed(
-            title="Need Help?",
-            description="Click below to create a support ticket!",
-            color=0x7289da
-        )
-        embed.add_field(
-            name="Guidelines",
-            value="• Be specific with your issue\n• Stay respectful\n• No spam",
-            inline=False
-        )
-        view = self.TicketCreationView(self)
-        await ctx.send(embed=embed, view=view)
-        await ctx.message.delete()
+        """Create the ticket creation panel."""
+        try:
+            existing_panel = await self.check_existing_panel(ctx.channel)
+            if existing_panel:
+                await ctx.send(embed=discord.Embed(
+                    title="Error",
+                    description="A ticket panel already exists in this channel!",
+                    color=0xff0000
+                ), delete_after=10)
+                return
+
+            embed = discord.Embed(
+                title="Need Help?",
+                description="Click below to create a support ticket.",
+                color=0x7289da
+            )
+            embed.add_field(
+                name="Guidelines",
+                value="• Be specific with your issue\n• Stay respectful\n• No spam",
+                inline=False
+            )
+            await ctx.send(embed=embed, view=self.TicketCreationView(self))
+            try:
+                await ctx.message.delete()
+            except:
+                logger.debug("Command message deletion skipped")
+        except Exception as e:
+            logger.error(f"Ticket panel creation failed: {e}\n{traceback.format_exc()}")
+            await ctx.send(embed=discord.Embed(
+                title="Error",
+                description="Failed to create ticket panel.",
+                color=0xff0000
+            ), delete_after=10)
+
+    @commands.command()
+    @commands.has_permissions(administrator=True)
+    async def ticketstats(self, ctx: commands.Context):
+        """Show ticket statistics."""
+        try:
+            cursor = self.db.cursor()
+            cursor.execute("SELECT COUNT(*) FROM tickets WHERE status = 'open'")
+            open_count = cursor.fetchone()[0]
+            cursor.execute("SELECT COUNT(*) FROM tickets WHERE status = 'closed'")
+            closed_count = cursor.fetchone()[0]
+            embed = discord.Embed(
+                title="📊 Ticket Statistics",
+                description=f"**Open Tickets:** {open_count}\n**Closed Tickets:** {closed_count}\n**Total Tickets:** {open_count + closed_count}",
+                color=0x7289da
+            )
+            await ctx.send(embed=embed, delete_after=30)
+        except Exception as e:
+            logger.error(f"Ticket stats failed: {e}\n{traceback.format_exc()}")
+            await ctx.send(embed=discord.Embed(
+                title="Error",
+                description="Failed to retrieve ticket stats.",
+                color=0xff0000
+            ), delete_after=10)
+
+    @commands.command()
+    async def suggest(self, ctx: commands.Context):
+        """Suggest an FAQ answer for the ticket."""
+        try:
+            if ctx.channel.id not in self.tickets.values():
+                await ctx.send(embed=discord.Embed(
+                    title="Error",
+                    description="Not a ticket channel!",
+                    color=0xff0000
+                ), delete_after=30)
+                return
+            cursor = self.db.cursor()
+            cursor.execute("SELECT reason FROM tickets WHERE channel_id = ?", (ctx.channel.id,))
+            result = cursor.fetchone()
+            if not result:
+                await ctx.send(embed=discord.Embed(
+                    title="Error",
+                    description="Ticket reason not found.",
+                    color=0xff0000
+                ), delete_after=30)
+                return
+            reason = result[0]
+            suggestion = await self.get_faq_suggestion(reason)
+            if suggestion:
+                embed = discord.Embed(
+                    title="AI Suggestion",
+                    description=f"**Question:** {suggestion['question']}\n\n{suggestion['answer']}",
+                    color=0x7289da
+                )
+                if ctx.author.guild_permissions.administrator:
+                    embed.add_field(
+                        name="Auto-Close?",
+                        value="Reply `!close` to accept this suggestion and close the ticket.",
+                        inline=False
+                    )
+                await ctx.send(embed=embed)
+            else:
+                await ctx.send(embed=discord.Embed(
+                    title="No Suggestion",
+                    description="No matching FAQ found. Please provide more details.",
+                    color=0xffd700
+                ))
+        except Exception as e:
+            logger.error(f"Suggest command failed: {e}\n{traceback.format_exc()}")
+            await ctx.send(embed=discord.Embed(
+                title="Error",
+                description="Failed to provide FAQ suggestion.",
+                color=0xff0000
+            ), delete_after=30)
+
+    @commands.command()
+    @commands.has_permissions(administrator=True)
+    async def close(self, ctx: commands.Context):
+        """Close a ticket with AI suggestion (admin only)."""
+        try:
+            if ctx.channel.id not in self.tickets.values():
+                await ctx.send(embed=discord.Embed(
+                    title="Error",
+                    description="This is not a ticket channel!",
+                    color=0xff0000
+                ), delete_after=10)
+                return
+            confirm_view = self.ConfirmationView(self)
+            await ctx.send(embed=discord.Embed(
+                title="Confirm Closure",
+                description="Close ticket? Reply 'yes' to log the conversation, 'no' to close without logging.",
+                color=0xffd700
+            ), view=confirm_view)
+            await confirm_view.wait()
+            if confirm_view.value:
+                def check(m):
+                    return m.author == ctx.author and m.channel == ctx.channel and m.content.lower() in ['yes', 'no']
+                try:
+                    response = await self.bot.wait_for('message', check=check, timeout=30.0)
+                    log_text = None
+                    if response.content.lower() == 'yes':
+                        log_text = await self.log_conversation(ctx.channel)
+                    await self.close_ticket(ctx.channel, ctx.author, log_text)
+                    await ctx.send(embed=discord.Embed(
+                        title="Ticket Closed",
+                        description="Ticket closed successfully",
+                        color=0x00cc00
+                    ), delete_after=10)
+                except asyncio.TimeoutError:
+                    await ctx.send(embed=discord.Embed(
+                        title="Cancelled",
+                        description="Ticket closure cancelled due to timeout",
+                        color=0x00cc00
+                    ), delete_after=10)
+            else:
+                await ctx.send(embed=discord.Embed(
+                    title="Cancelled",
+                    description="Ticket closure cancelled",
+                    color=0x00cc00
+                ), delete_after=10)
+        except Exception as e:
+            logger.error(f"Close command failed: {e}\n{traceback.format_exc()}")
+            try:
+                await ctx.send(embed=discord.Embed(
+                    title="Error",
+                    description="Failed to close ticket.",
+                    color=0xff0000
+                ), delete_after=10)
+            except discord.NotFound:
+                logger.warning("Channel already deleted, cannot send error message")
+
+    @commands.command()
+    async def userclose(self, ctx: commands.Context):
+        """Close a ticket (ticket owner only)."""
+        try:
+            if ctx.channel.id not in self.tickets.values():
+                await ctx.send(embed=discord.Embed(
+                    title="Error",
+                    description="This is not a ticket channel!",
+                    color=0xff0000
+                ), delete_after=10)
+                return
+            user_id = next((k for k, v in self.tickets.items() if v == ctx.channel.id), None)
+            if user_id is None or ctx.author.id != user_id:
+                await ctx.send(embed=discord.Embed(
+                    title="Permission Denied",
+                    description="Only the ticket owner can use this command.",
+                    color=0xff0000
+                ), delete_after=10)
+                return
+            confirm_view = self.ConfirmationView(self)
+            await ctx.send(embed=discord.Embed(
+                title="Confirm Closure",
+                description="Are you sure you want to close this ticket? The conversation will be logged.",
+                color=0xffd700
+            ), view=confirm_view)
+            await confirm_view.wait()
+            if confirm_view.value:
+                log_text = await self.log_conversation(ctx.channel)
+                await self.close_ticket(ctx.channel, ctx.author, log_text)
+                await ctx.send(embed=discord.Embed(
+                    title="Ticket Closed",
+                    description="Ticket closed and logged",
+                    color=0x00cc00
+                ), delete_after=10)
+            else:
+                await ctx.send(embed=discord.Embed(
+                    title="Cancelled",
+                    description="Ticket closure cancelled",
+                    color=0x00cc00
+                ), delete_after=10)
+        except Exception as e:
+            logger.error(f"Userclose command failed: {e}\n{traceback.format_exc()}")
+            try:
+                await ctx.send(embed=discord.Embed(
+                    title="Error",
+                    description="Failed to close ticket.",
+                    color=0xff0000
+                ), delete_after=10)
+            except discord.NotFound:
+                logger.warning("Channel already deleted, cannot send error message")
+
+    @commands.command()
+    @commands.is_owner()
+    async def setlogchannel(self, ctx: commands.Context, channel: discord.TextChannel):
+        """Set the ticket-logs channel (server owner only)."""
+        try:
+            if not channel.permissions_for(ctx.guild.me).send_messages:
+                await ctx.send(embed=discord.Embed(
+                    title="Error",
+                    description="I don't have permission to send messages in that channel.",
+                    color=0xff0000
+                ), delete_after=10)
+                return
+            self.save_log_channel_id(channel.id)
+            await ctx.send(embed=discord.Embed(
+                title="Success",
+                description=f"Ticket logs will now be sent to {channel.mention}.",
+                color=0x00cc00
+            ), delete_after=10)
+        except Exception as e:
+            logger.error(f"Set log channel failed: {e}\n{traceback.format_exc()}")
+            await ctx.send(embed=discord.Embed(
+                title="Error",
+                description="Failed to set log channel.",
+                color=0xff0000
+            ), delete_after=10)
+
+    @commands.command()
+    @commands.has_permissions(administrator=True)
+    async def ticketdebug(self, ctx: commands.Context):
+        """Debug ticket system state."""
+        try:
+            bot_member = ctx.guild.me
+            perms = bot_member.guild_permissions
+            embed = discord.Embed(
+                title="Ticket System Debug",
+                color=0x7289da
+            )
+            embed.add_field(
+                name="Bot Permissions",
+                value=f"Manage Channels: {perms.manage_channels}\nSend Messages: {perms.send_messages}\nManage Messages: {perms.manage_messages}",
+                inline=False
+            )
+            embed.add_field(
+                name="Active Tickets",
+                value=f"{len(self.tickets)} in memory, {self.db.execute('SELECT COUNT(*) FROM tickets WHERE status = ?', ('open',)).fetchone()[0]} in DB",
+                inline=False
+            )
+            staff_role = ctx.guild.get_role(self.staff_role_id) if self.staff_role_id else None
+            embed.add_field(
+                name="Staff Role",
+                value=f"{'Valid' if staff_role else 'Invalid or None'} (ID: {self.staff_role_id or 'None'})",
+                inline=False
+            )
+            embed.add_field(
+                name="AI Model Status",
+                value=f"{'Loaded' if self.model else 'Failed to load'}, FAQs: {len(self.faqs) if self.faqs else 0}, Embeddings: {'Loaded' if self.faq_embeddings is not None else 'Failed'}",
+                inline=False
+            )
+            embed.add_field(
+                name="Log Channel",
+                value=f"ID: {self.log_channel_id or 'Not set'}, Accessible: {'Yes' if self.bot.get_channel(self.log_channel_id) else 'No'}",
+                inline=False
+            )
+            try:
+                with open("ticket.log", "r", encoding="utf-8") as f:
+                    recent_errors = [line for line in f.readlines()[-100:] if "ERROR" in line]
+                embed.add_field(
+                    name="Recent Errors",
+                    value=f"{len(recent_errors)} errors in last 100 log lines\n" + (
+                        "\n".join(recent_errors[-3:])[:1000] or "None"
+                    ),
+                    inline=False
+                )
+            except:
+                embed.add_field(
+                    name="Recent Errors",
+                    value="Unable to read log file",
+                    inline=False
+                )
+            await ctx.send(embed=embed, delete_after=30)
+        except Exception as e:
+            logger.error(f"Ticket debug failed: {e}\n{traceback.format_exc()}")
+            await ctx.send(embed=discord.Embed(
+                title="Error",
+                description="Failed to retrieve debug information.",
+                color=0xff0000
+            ), delete_after=10)
 
     @commands.Cog.listener()
     async def on_ready(self):
-        self.bot.add_view(self.TicketCreationView(self))
-        self.bot.add_view(self.TicketControlView(self))
-        print(f"Ticket system ready! Active tickets: {len(self.tickets)}")
+        try:
+            cursor = self.db.cursor()
+            cursor.execute("SELECT user_id, channel_id FROM tickets WHERE status = 'open'")
+            self.tickets = {row[0]: row[1] for row in cursor.fetchall()}
+            cursor.execute("SELECT MAX(ticket_id) FROM tickets")
+            self.ticket_count = cursor.fetchone()[0] or 0
+            logger.info(f"Ticket system ready! Active tickets: {len(self.tickets)}, ticket_count: {self.ticket_count}")
+        except Exception as e:
+            logger.error(f"On ready failed: {e}\n{traceback.format_exc()}")
 
 async def setup(bot):
-    await bot.add_cog(TicketSystem(bot))
-
+    try:
+        await bot.add_cog(TicketSystem(bot))
+        logger.info("Loaded ticket cog: cogs.ticketsystem")
+    except Exception as e:
+        logger.error(f"Failed to load ticket cog: {e}\n{traceback.format_exc()}")
+        raise e
 
 # ### LOVELY WORKING
 
