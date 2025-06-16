@@ -3,6 +3,7 @@ import os
 import asyncio
 from discord.ext import commands
 from dotenv import load_dotenv
+from keep_alive import keep_alive
 
 # Load environment variables
 load_dotenv()
@@ -68,4 +69,5 @@ async def main():
         await bot.start(TOKEN)
 
 if __name__ == "__main__":
+    keep_alive()
     asyncio.run(main())
