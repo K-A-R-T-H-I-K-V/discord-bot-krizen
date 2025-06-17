@@ -1,0 +1,87 @@
+2025-06-17 18:40:49,773 - cogs.roles - INFO - AdvancedRoleSystem initialized
+2025-06-17 18:40:49,773 - cogs.roles - INFO - Loaded cog: cogs.advancedrolesystem
+2025-06-17 18:40:56,392 - cogs.ai_powered_moderation - INFO - Loading Detoxify model...
+2025-06-17 18:41:06,027 - cogs.ai_powered_moderation - INFO - Detoxify model loaded successfully
+2025-06-17 18:41:06,027 - cogs.ai_powered_moderation - INFO - Loaded cog: cogs.ai_powered_moderation
+2025-06-17 18:41:06,391 - sentence_transformers.SentenceTransformer - INFO - Use pytorch device_name: cpu
+2025-06-17 18:41:06,392 - sentence_transformers.SentenceTransformer - INFO - Load pretrained SentenceTransformer: all-MiniLM-L6-v2
+2025-06-17 18:41:09,734 - cogs.ticketsystem - INFO - SentenceTransformer model loaded successfully
+2025-06-17 18:41:09,744 - cogs.ticketsystem - INFO - Loaded faqs.json
+2025-06-17 18:41:09,822 - cogs.ticketsystem - INFO - Loaded log_channel_id: 1360681252449161396
+2025-06-17 18:41:09,823 - cogs.ticketsystem - INFO - TicketSystem initialized
+2025-06-17 18:41:09,823 - cogs.ticketsystem - INFO - Loaded ticket cog: cogs.ticketsystem
+2025-06-17 18:41:09,831 - cogs.embedsystem - INFO - EmbedSystem initialized
+2025-06-17 18:41:09,832 - cogs.embedsystem - INFO - Loaded cog: cogs.embedsystem
+2025-06-17 18:45:09,609 - cogs.roles - INFO - Reaction role set for Member by 476047822043480074
+2025-06-17 18:50:15,935 - cogs.roles - INFO - AdvancedRoleSystem initialized
+2025-06-17 18:50:15,935 - cogs.roles - INFO - Loaded cog: cogs.advancedrolesystem
+2025-06-17 18:50:22,478 - cogs.ai_powered_moderation - INFO - Loading Detoxify model...
+2025-06-17 18:50:33,246 - cogs.ai_powered_moderation - INFO - Detoxify model loaded successfully
+2025-06-17 18:50:33,247 - cogs.ai_powered_moderation - INFO - Loaded cog: cogs.ai_powered_moderation
+2025-06-17 18:50:33,686 - sentence_transformers.SentenceTransformer - INFO - Use pytorch device_name: cpu
+2025-06-17 18:50:33,686 - sentence_transformers.SentenceTransformer - INFO - Load pretrained SentenceTransformer: all-MiniLM-L6-v2
+2025-06-17 18:50:37,165 - cogs.ticketsystem - INFO - SentenceTransformer model loaded successfully
+2025-06-17 18:50:37,167 - cogs.ticketsystem - INFO - Loaded faqs.json
+2025-06-17 18:50:37,256 - cogs.ticketsystem - INFO - Loaded log_channel_id: 1360681252449161396
+2025-06-17 18:50:37,257 - cogs.ticketsystem - INFO - TicketSystem initialized
+2025-06-17 18:50:37,257 - cogs.ticketsystem - INFO - Loaded ticket cog: cogs.ticketsystem
+2025-06-17 18:50:37,268 - cogs.embedsystem - INFO - EmbedSystem initialized
+2025-06-17 18:50:37,268 - cogs.embedsystem - INFO - Loaded cog: cogs.embedsystem
+2025-06-17 18:54:53,402 - cogs.embedsystem - INFO - Embed created by 476047822043480074 in 1384497905993515088
+2025-06-17 19:01:45,180 - cogs.embedsystem - INFO - Embed created by 476047822043480074 in 1384494027092656209
+2025-06-17 19:02:37,119 - cogs.embedsystem - INFO - Embed created by 476047822043480074 in 1384494027092656209
+2025-06-17 19:03:52,701 - cogs.embedsystem - INFO - Embed created by 476047822043480074 in 1384494027092656209
+2025-06-17 19:04:43,445 - cogs.embedsystem - INFO - Embed created by 476047822043480074 in 1384494027092656209
+2025-06-17 19:07:10,692 - cogs.roles - ERROR - Reaction role select failed: 'Webhook' object has no attribute 'send_modal'
+2025-06-17 19:08:21,609 - cogs.roles - INFO - AdvancedRoleSystem initialized
+2025-06-17 19:08:21,610 - cogs.roles - INFO - Loaded cog: cogs.advancedrolesystem
+2025-06-17 19:08:29,202 - cogs.ai_powered_moderation - INFO - Loading Detoxify model...
+2025-06-17 19:08:39,388 - cogs.ai_powered_moderation - INFO - Detoxify model loaded successfully
+2025-06-17 19:08:39,389 - cogs.ai_powered_moderation - INFO - Loaded cog: cogs.ai_powered_moderation
+2025-06-17 19:08:39,823 - sentence_transformers.SentenceTransformer - INFO - Use pytorch device_name: cpu
+2025-06-17 19:08:39,824 - sentence_transformers.SentenceTransformer - INFO - Load pretrained SentenceTransformer: all-MiniLM-L6-v2
+2025-06-17 19:08:45,496 - cogs.ticketsystem - INFO - SentenceTransformer model loaded successfully
+2025-06-17 19:08:45,498 - cogs.ticketsystem - INFO - Loaded faqs.json
+2025-06-17 19:08:45,579 - cogs.ticketsystem - INFO - Loaded log_channel_id: 1360681252449161396
+2025-06-17 19:08:45,580 - cogs.ticketsystem - INFO - TicketSystem initialized
+2025-06-17 19:08:45,580 - cogs.ticketsystem - INFO - Loaded ticket cog: cogs.ticketsystem
+2025-06-17 19:08:45,584 - cogs.embedsystem - INFO - EmbedSystem initialized
+2025-06-17 19:08:45,585 - cogs.embedsystem - INFO - Loaded cog: cogs.embedsystem
+2025-06-17 19:10:14,319 - cogs.roles - ERROR - Reaction role select failed: 'Webhook' object has no attribute 'send_modal'
+2025-06-17 19:10:30,537 - cogs.roles - ERROR - Reaction role select failed: 'Webhook' object has no attribute 'send_modal'
+2025-06-17 19:15:47,290 - cogs.embedsystem - INFO - Embed created by 476047822043480074 in 1384529351441383605
+2025-06-17 19:17:19,223 - cogs.roles - INFO - AdvancedRoleSystem initialized
+2025-06-17 19:17:19,224 - cogs.roles - INFO - Loaded cog: cogs.advancedrolesystem
+2025-06-17 19:17:25,261 - cogs.ai_powered_moderation - INFO - Loading Detoxify model...
+2025-06-17 19:17:34,033 - cogs.ai_powered_moderation - INFO - Detoxify model loaded successfully
+2025-06-17 19:17:34,033 - cogs.ai_powered_moderation - INFO - Loaded cog: cogs.ai_powered_moderation
+2025-06-17 19:17:34,436 - sentence_transformers.SentenceTransformer - INFO - Use pytorch device_name: cpu
+2025-06-17 19:17:34,437 - sentence_transformers.SentenceTransformer - INFO - Load pretrained SentenceTransformer: all-MiniLM-L6-v2
+2025-06-17 19:17:38,532 - cogs.ticketsystem - INFO - SentenceTransformer model loaded successfully
+2025-06-17 19:17:38,534 - cogs.ticketsystem - INFO - Loaded faqs.json
+2025-06-17 19:17:38,619 - cogs.ticketsystem - INFO - Loaded log_channel_id: 1360681252449161396
+2025-06-17 19:17:38,620 - cogs.ticketsystem - INFO - TicketSystem initialized
+2025-06-17 19:17:38,621 - cogs.ticketsystem - INFO - Loaded ticket cog: cogs.ticketsystem
+2025-06-17 19:17:38,625 - cogs.embedsystem - INFO - EmbedSystem initialized
+2025-06-17 19:17:38,626 - cogs.embedsystem - INFO - Loaded cog: cogs.embedsystem
+2025-06-17 19:19:55,361 - cogs.roles - INFO - Reaction role set for Verified by 476047822043480074
+2025-06-17 19:26:49,904 - cogs.roles - INFO - AdvancedRoleSystem initialized
+2025-06-17 19:26:49,906 - cogs.roles - INFO - Loaded cog: cogs.advancedrolesystem
+2025-06-17 19:26:55,743 - cogs.ai_powered_moderation - INFO - Loading Detoxify model...
+2025-06-17 19:27:04,138 - cogs.ai_powered_moderation - INFO - Detoxify model loaded successfully
+2025-06-17 19:27:04,139 - cogs.ai_powered_moderation - INFO - Loaded cog: cogs.ai_powered_moderation
+2025-06-17 19:27:04,422 - sentence_transformers.SentenceTransformer - INFO - Use pytorch device_name: cpu
+2025-06-17 19:27:04,423 - sentence_transformers.SentenceTransformer - INFO - Load pretrained SentenceTransformer: all-MiniLM-L6-v2
+2025-06-17 19:27:08,150 - cogs.ticketsystem - INFO - SentenceTransformer model loaded successfully
+2025-06-17 19:27:08,151 - cogs.ticketsystem - INFO - Loaded faqs.json
+2025-06-17 19:27:08,255 - cogs.ticketsystem - INFO - Loaded log_channel_id: 1360681252449161396
+2025-06-17 19:27:08,255 - cogs.ticketsystem - INFO - TicketSystem initialized
+2025-06-17 19:27:08,256 - cogs.ticketsystem - INFO - Loaded ticket cog: cogs.ticketsystem
+2025-06-17 19:27:08,259 - cogs.embedsystem - INFO - EmbedSystem initialized
+2025-06-17 19:27:08,259 - cogs.embedsystem - INFO - Loaded cog: cogs.embedsystem
+2025-06-17 19:27:51,916 - cogs.roles - ERROR - Invalid message ID 1384529459465420902 by 476047822043480074
+2025-06-17 19:28:28,689 - cogs.roles - INFO - Reaction role set for Verified by 476047822043480074 on message 1384529459465420902
+2025-06-17 19:39:24,158 - cogs.embedsystem - INFO - Embed created by 476047822043480074 in 1384494828846579802
+2025-06-17 19:40:43,815 - cogs.embedsystem - INFO - Embed created by 476047822043480074 in 1384494828846579802
+2025-06-17 19:43:40,937 - cogs.embedsystem - INFO - Embed created by 476047822043480074 in 1384494828846579802
+2025-06-17 19:44:56,688 - cogs.embedsystem - INFO - Embed created by 476047822043480074 in 1384494828846579802

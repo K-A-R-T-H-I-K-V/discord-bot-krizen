@@ -54,7 +54,8 @@ async def load_cogs():
         "cogs.events",
         "cogs.welcome_farewell",
         "cogs.ai_powered_moderation",
-        "cogs.ticketsystem"
+        "cogs.ticketsystem",
+        "cogs.embedsystem"
     ]
     
     for cog in cogs:
@@ -69,5 +70,5 @@ async def main():
         await bot.start(TOKEN)
 
 if __name__ == "__main__":
-    keep_alive()
+    #keep_alive()
     asyncio.run(main())

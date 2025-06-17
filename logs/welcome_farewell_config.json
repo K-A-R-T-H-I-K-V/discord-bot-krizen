@@ -1,8 +1,8 @@
 {
     "1354429268238663791": {
-        "welcome_channel": 1354523361685930135,
-        "welcome_message": "Welcome to the server, {user}! \ud83c\udf89",
-        "farewell_channel": 1354524092346269758,
-        "farewell_message": "1354523361685930135 {user} will be missed.. don't leave"
+        "welcome_channel": 1384497905993515088,
+        "welcome_message": "<#1354523361685930135>",
+        "farewell_channel": 1384497905993515088,
+        "farewell_message": "<#1354524092346269758>"
     }
 }
