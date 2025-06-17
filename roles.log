@@ -85,3 +85,136 @@
 2025-06-17 19:40:43,815 - cogs.embedsystem - INFO - Embed created by 476047822043480074 in 1384494828846579802
 2025-06-17 19:43:40,937 - cogs.embedsystem - INFO - Embed created by 476047822043480074 in 1384494828846579802
 2025-06-17 19:44:56,688 - cogs.embedsystem - INFO - Embed created by 476047822043480074 in 1384494828846579802
+2025-06-17 19:54:11,507 - cogs.roles - INFO - AdvancedRoleSystem initialized
+2025-06-17 19:54:11,508 - cogs.roles - INFO - Loaded cog: cogs.advancedrolesystem
+2025-06-17 19:54:17,524 - cogs.ai_powered_moderation - INFO - Loading Detoxify model...
+2025-06-17 19:54:25,675 - cogs.ai_powered_moderation - INFO - Detoxify model loaded successfully
+2025-06-17 19:54:25,676 - cogs.ai_powered_moderation - INFO - Loaded cog: cogs.ai_powered_moderation
+2025-06-17 19:54:25,970 - sentence_transformers.SentenceTransformer - INFO - Use pytorch device_name: cpu
+2025-06-17 19:54:25,971 - sentence_transformers.SentenceTransformer - INFO - Load pretrained SentenceTransformer: all-MiniLM-L6-v2
+2025-06-17 19:54:29,175 - cogs.ticketsystem - INFO - SentenceTransformer model loaded successfully
+2025-06-17 19:54:29,176 - cogs.ticketsystem - INFO - Loaded faqs.json
+2025-06-17 19:54:29,250 - cogs.ticketsystem - INFO - Loaded log_channel_id: 1360681252449161396
+2025-06-17 19:54:29,251 - cogs.ticketsystem - INFO - TicketSystem initialized
+2025-06-17 19:54:29,251 - cogs.ticketsystem - INFO - Loaded ticket cog: cogs.ticketsystem
+2025-06-17 19:54:29,254 - cogs.embedsystem - INFO - EmbedSystem initialized
+2025-06-17 19:54:29,255 - cogs.embedsystem - INFO - Loaded cog: cogs.embedsystem
+2025-06-17 22:23:43,143 - cogs.roles - INFO - AdvancedRoleSystem initialized
+2025-06-17 22:23:43,144 - cogs.roles - INFO - Loaded cog: cogs.advancedrolesystem
+2025-06-17 22:23:49,460 - cogs.ai_powered_moderation - INFO - Loading Detoxify model...
+2025-06-17 22:24:01,746 - cogs.ai_powered_moderation - INFO - Detoxify model loaded successfully
+2025-06-17 22:24:01,746 - cogs.ai_powered_moderation - INFO - Loaded cog: cogs.ai_powered_moderation
+2025-06-17 22:24:02,294 - sentence_transformers.SentenceTransformer - INFO - Use pytorch device_name: cpu
+2025-06-17 22:24:02,295 - sentence_transformers.SentenceTransformer - INFO - Load pretrained SentenceTransformer: all-MiniLM-L6-v2
+2025-06-17 22:24:06,518 - cogs.ticketsystem - INFO - SentenceTransformer model loaded successfully
+2025-06-17 22:24:06,521 - cogs.ticketsystem - INFO - Loaded faqs.json
+2025-06-17 22:24:06,784 - cogs.ticketsystem - INFO - Loaded log_channel_id: 1360681252449161396
+2025-06-17 22:24:06,786 - cogs.ticketsystem - INFO - TicketSystem initialized
+2025-06-17 22:24:06,786 - cogs.ticketsystem - INFO - Loaded ticket cog: cogs.ticketsystem
+2025-06-17 22:24:06,790 - cogs.embedsystem - INFO - EmbedSystem initialized
+2025-06-17 22:24:06,791 - cogs.embedsystem - INFO - Loaded cog: cogs.embedsystem
+2025-06-17 22:31:24,070 - cogs.embedsystem - INFO - Embed created by 476047822043480074 in 1384494027092656209
+2025-06-17 22:34:02,111 - cogs.ticketsystem - INFO - Saved log_channel_id: 1360681252449161396
+2025-06-17 22:34:02,258 - cogs.ticketsystem - INFO - Saved log_channel_id: 1360681252449161396
+2025-06-17 22:38:30,499 - cogs.ai_powered_moderation - INFO - Profanity detected: fuck
+2025-06-17 22:38:31,103 - cogs.ai_powered_moderation - INFO - Deleted toxic message from theodore5922
+2025-06-17 22:54:51,972 - cogs.roles - INFO - AdvancedRoleSystem initialized
+2025-06-17 22:54:51,972 - cogs.roles - INFO - Loaded cog: cogs.advancedrolesystem
+2025-06-17 22:55:03,090 - sentence_transformers.SentenceTransformer - INFO - Use pytorch device_name: cpu
+2025-06-17 22:55:03,091 - sentence_transformers.SentenceTransformer - INFO - Load pretrained SentenceTransformer: all-MiniLM-L6-v2
+2025-06-17 22:55:06,748 - cogs.ticketsystem - INFO - SentenceTransformer model loaded successfully
+2025-06-17 22:55:06,763 - cogs.ticketsystem - INFO - Loaded faqs.json
+2025-06-17 22:55:06,822 - cogs.ticketsystem - INFO - Loaded log_channel_id: 1360681252449161396
+2025-06-17 22:55:06,823 - cogs.ticketsystem - INFO - TicketSystem initialized
+2025-06-17 22:55:06,824 - cogs.ticketsystem - INFO - Loaded ticket cog: cogs.ticketsystem
+2025-06-17 22:55:06,828 - cogs.embedsystem - INFO - EmbedSystem initialized
+2025-06-17 22:55:06,829 - cogs.embedsystem - INFO - Loaded cog: cogs.embedsystem
+2025-06-17 22:55:48,080 - cogs.ticketsystem - INFO - Created Support Tickets category
+2025-06-17 22:55:49,585 - cogs.ticketsystem - INFO - Created ticket #8 for user 476047822043480074
+2025-06-17 22:56:08,515 - cogs.ticketsystem - INFO - Sent conversation log to ticket-logs channel 1360681252449161396
+2025-06-17 22:56:12,729 - cogs.ticketsystem - INFO - Closed ticket for user 476047822043480074
+2025-06-17 23:03:14,132 - cogs.roles - INFO - AdvancedRoleSystem initialized
+2025-06-17 23:03:14,133 - cogs.roles - INFO - Loaded cog: cogs.advancedrolesystem
+2025-06-17 23:03:18,302 - cogs.ai_powered_moderation - INFO - Moderation database initialized
+2025-06-17 23:03:18,302 - cogs.ai_powered_moderation - INFO - Loading Detoxify model...
+2025-06-17 23:03:24,704 - cogs.ai_powered_moderation - INFO - Detoxify model loaded successfully
+2025-06-17 23:03:24,705 - cogs.ai_powered_moderation - INFO - Loaded cog: cogs.ai_powered_moderation
+2025-06-17 23:03:24,903 - sentence_transformers.SentenceTransformer - INFO - Use pytorch device_name: cpu
+2025-06-17 23:03:24,904 - sentence_transformers.SentenceTransformer - INFO - Load pretrained SentenceTransformer: all-MiniLM-L6-v2
+2025-06-17 23:03:28,654 - cogs.ticketsystem - INFO - SentenceTransformer model loaded successfully
+2025-06-17 23:03:28,655 - cogs.ticketsystem - INFO - Loaded faqs.json
+2025-06-17 23:03:28,703 - cogs.ticketsystem - INFO - Loaded log_channel_id: 1360681252449161396
+2025-06-17 23:03:28,704 - cogs.ticketsystem - INFO - TicketSystem initialized
+2025-06-17 23:03:28,705 - cogs.ticketsystem - INFO - Loaded ticket cog: cogs.ticketsystem
+2025-06-17 23:03:28,708 - cogs.embedsystem - INFO - EmbedSystem initialized
+2025-06-17 23:03:28,708 - cogs.embedsystem - INFO - Loaded cog: cogs.embedsystem
+2025-06-17 23:04:11,053 - cogs.ticketsystem - INFO - Created ticket #9 for user 1338056067518693448
+2025-06-17 23:04:23,452 - cogs.ticketsystem - INFO - Sent conversation log to ticket-logs channel 1360681252449161396
+2025-06-17 23:04:26,776 - cogs.ticketsystem - INFO - Closed ticket for user 1338056067518693448
+2025-06-17 23:05:07,519 - cogs.ai_powered_moderation - ERROR - Set mod-logs channel failed: no such column: mod_logs_channel_id
+2025-06-17 23:05:07,521 - discord.client - ERROR - Ignoring exception in on_message
+Traceback (most recent call last):
+  File "C:\Users\karth\discord-bot-kriZen\venv\Lib\site-packages\discord\client.py", line 481, in _run_event
+    await coro(*args, **kwargs)
+  File "C:\Users\karth\discord-bot-kriZen\cogs\ai_powered_moderation.py", line 1208, in on_message
+    settings = self.get_guild_settings(guild_id)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\karth\discord-bot-kriZen\cogs\ai_powered_moderation.py", line 1056, in get_guild_settings
+    cursor.execute("SELECT enabled, threshold, mod_logs_channel_id FROM settings WHERE guild_id = ?", (guild_id,))
+sqlite3.OperationalError: no such column: mod_logs_channel_id
+2025-06-17 23:06:59,164 - discord.gateway - INFO - Shard ID None has successfully RESUMED session c2d140eb0883678d6af269cb5d74215c.
+2025-06-17 23:09:22,153 - cogs.roles - INFO - AdvancedRoleSystem initialized
+2025-06-17 23:09:22,153 - cogs.roles - INFO - Loaded cog: cogs.advancedrolesystem
+2025-06-17 23:09:26,270 - cogs.ai_powered_moderation - INFO - Adding mod_logs_channel_id column to settings table
+2025-06-17 23:09:26,298 - cogs.ai_powered_moderation - INFO - Moderation database initialized
+2025-06-17 23:09:26,299 - cogs.ai_powered_moderation - INFO - Loading Detoxify model...
+2025-06-17 23:09:32,256 - cogs.ai_powered_moderation - INFO - Detoxify model loaded successfully
+2025-06-17 23:09:32,257 - cogs.ai_powered_moderation - INFO - Loaded cog: cogs.ai_powered_moderation
+2025-06-17 23:09:32,453 - sentence_transformers.SentenceTransformer - INFO - Use pytorch device_name: cpu
+2025-06-17 23:09:32,453 - sentence_transformers.SentenceTransformer - INFO - Load pretrained SentenceTransformer: all-MiniLM-L6-v2
+2025-06-17 23:09:36,916 - cogs.ticketsystem - INFO - SentenceTransformer model loaded successfully
+2025-06-17 23:09:36,916 - cogs.ticketsystem - INFO - Loaded faqs.json
+2025-06-17 23:09:36,972 - cogs.ticketsystem - INFO - Loaded log_channel_id: 1360681252449161396
+2025-06-17 23:09:36,973 - cogs.ticketsystem - INFO - TicketSystem initialized
+2025-06-17 23:09:36,973 - cogs.ticketsystem - INFO - Loaded ticket cog: cogs.ticketsystem
+2025-06-17 23:09:36,977 - cogs.embedsystem - INFO - EmbedSystem initialized
+2025-06-17 23:09:36,978 - cogs.embedsystem - INFO - Loaded cog: cogs.embedsystem
+2025-06-17 23:09:58,097 - cogs.ai_powered_moderation - INFO - Updated guild settings for 1354429268238663791: enabled=True, threshold=0.4, mod_logs_channel_id=1356234133130711111
+2025-06-17 23:09:58,189 - cogs.ai_powered_moderation - INFO - Updated guild settings for 1354429268238663791: enabled=True, threshold=0.4, mod_logs_channel_id=1356234133130711111
+2025-06-17 23:09:58,717 - cogs.ai_powered_moderation - INFO - Set mod-logs channel to 1356234133130711111 for guild 1354429268238663791
+2025-06-17 23:09:59,199 - cogs.ai_powered_moderation - INFO - Set mod-logs channel to 1356234133130711111 for guild 1354429268238663791
+2025-06-17 23:10:05,533 - cogs.ai_powered_moderation - INFO - Profanity detected: fuck
+2025-06-17 23:10:06,021 - cogs.ai_powered_moderation - INFO - Deleted toxic message from theodore5922
+2025-06-17 23:10:06,032 - cogs.ai_powered_moderation - INFO - Found mod-logs channel by ID: 1356234133130711111
+2025-06-17 23:11:14,267 - cogs.ticketsystem - INFO - Created ticket #10 for user 476047822043480074
+2025-06-17 23:11:55,339 - cogs.ticketsystem - INFO - Closed ticket for user 476047822043480074
+2025-06-17 23:11:55,772 - cogs.ticketsystem - ERROR - Close command failed: 404 Not Found (error code: 10003): Unknown Channel
+Traceback (most recent call last):
+  File "C:\Users\karth\discord-bot-kriZen\cogs\ticketsystem.py", line 809, in close
+    await ctx.send(embed=discord.Embed(
+  File "C:\Users\karth\discord-bot-kriZen\venv\Lib\site-packages\discord\ext\commands\context.py", line 1043, in send
+    return await super().send(
+           ^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\karth\discord-bot-kriZen\venv\Lib\site-packages\discord\abc.py", line 1644, in send
+    data = await state.http.send_message(channel.id, params=params)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\karth\discord-bot-kriZen\venv\Lib\site-packages\discord\http.py", line 758, in request
+    raise NotFound(response, data)
+discord.errors.NotFound: 404 Not Found (error code: 10003): Unknown Channel
+
+2025-06-17 23:11:56,154 - cogs.ticketsystem - WARNING - Channel already deleted, cannot send error message
+2025-06-17 23:12:10,783 - cogs.ticketsystem - ERROR - Close command failed: 404 Not Found (error code: 10003): Unknown Channel
+Traceback (most recent call last):
+  File "C:\Users\karth\discord-bot-kriZen\cogs\ticketsystem.py", line 821, in close
+    await ctx.send(embed=discord.Embed(
+  File "C:\Users\karth\discord-bot-kriZen\venv\Lib\site-packages\discord\ext\commands\context.py", line 1043, in send
+    return await super().send(
+           ^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\karth\discord-bot-kriZen\venv\Lib\site-packages\discord\abc.py", line 1644, in send
+    data = await state.http.send_message(channel.id, params=params)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\karth\discord-bot-kriZen\venv\Lib\site-packages\discord\http.py", line 758, in request
+    raise NotFound(response, data)
+discord.errors.NotFound: 404 Not Found (error code: 10003): Unknown Channel
+
+2025-06-17 23:12:11,799 - cogs.ticketsystem - WARNING - Channel already deleted, cannot send error message
